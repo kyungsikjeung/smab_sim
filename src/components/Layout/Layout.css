@@ -1,0 +1,22 @@
+.layout {
+  display: grid;
+  grid-template-columns: var(--sidebar-width) 1fr;
+  grid-template-rows: var(--header-height) 1fr;
+  grid-template-areas:
+    "sidebar header"
+    "sidebar content";
+  height: 100vh;
+  width: 100vw;
+  transition: grid-template-columns var(--transition-base);
+}
+
+.layout--collapsed {
+  grid-template-columns: var(--sidebar-collapsed) 1fr;
+}
+
+.layout__content {
+  grid-area: content;
+  overflow-y: auto;
+  padding: 20px;
+  background: var(--bg-primary);
+}

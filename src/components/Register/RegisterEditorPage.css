@@ -1,0 +1,331 @@
+.register-editor {
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+  gap: 12px;
+}
+
+.register-editor__toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px 16px;
+  padding: 12px 14px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+}
+
+.register-editor__toolbar-left,
+.register-editor__toolbar-right {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px;
+}
+
+.register-editor__field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.register-editor__field--search {
+  min-width: min(520px, 100%);
+  flex: 1 1 360px;
+}
+
+.register-editor__label {
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.register-editor__search-input,
+.register-editor__poll-input,
+.register-editor__value-input {
+  font-family: var(--font-mono);
+}
+
+.register-editor__toggle {
+  display: inline-flex;
+  gap: 4px;
+  padding: 4px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+}
+
+.register-editor__toggle-btn {
+  min-width: 62px;
+  padding: 8px 12px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 600;
+  transition: background var(--transition-fast), color var(--transition-fast);
+}
+
+.register-editor__toggle-btn--active {
+  background: var(--blue-600);
+  color: var(--text-on-blue);
+}
+
+.register-editor__poll-box {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 40px;
+  padding: 0 10px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+}
+
+.register-editor__checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-primary);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.register-editor__checkbox input {
+  accent-color: var(--blue-500);
+}
+
+.register-editor__poll-input {
+  width: 72px;
+  padding: 6px 8px;
+  border: 0;
+  background: transparent;
+  color: var(--text-primary);
+}
+
+.register-editor__poll-input:focus {
+  box-shadow: none;
+}
+
+.register-editor__poll-unit {
+  color: var(--text-secondary);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.register-editor__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.register-editor__status-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.register-editor__status-pill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+  padding: 6px 10px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  background: var(--bg-card);
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-family: var(--font-mono);
+}
+
+.register-editor__status-pill--connected {
+  border-color: rgba(16, 185, 129, 0.32);
+  color: var(--color-success);
+}
+
+.register-editor__status-pill--changed {
+  border-color: rgba(239, 68, 68, 0.28);
+  color: #ff9a9a;
+}
+
+.register-editor__status-pill--polling {
+  border-color: rgba(59, 130, 246, 0.28);
+  color: var(--blue-200);
+}
+
+.register-editor__table-wrap {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--bg-card);
+}
+
+.register-editor__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.register-editor__table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 12px 14px;
+  background: rgba(20, 30, 58, 0.98);
+  border-bottom: 1px solid var(--border-default);
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 700;
+  text-align: left;
+  text-transform: uppercase;
+}
+
+.register-editor__table td {
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border-subtle);
+  vertical-align: middle;
+}
+
+.register-editor__row {
+  transition: background var(--transition-fast);
+}
+
+.register-editor__row:hover td {
+  background: var(--surface-hover);
+}
+
+.register-editor__row--selected td {
+  background: rgba(37, 99, 235, 0.1);
+}
+
+.register-editor__row--changed td {
+  background: rgba(239, 68, 68, 0.05);
+}
+
+.register-editor__row--unresolved td {
+  background: rgba(245, 158, 11, 0.04);
+}
+
+.register-editor__addr-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.register-editor__addr-hex,
+.register-editor__raw,
+.register-editor__access {
+  font-family: var(--font-mono);
+}
+
+.register-editor__addr-hex {
+  color: var(--blue-300);
+}
+
+.register-editor__addr-dec {
+  color: var(--text-tertiary);
+  font-size: 11px;
+}
+
+.register-editor__name {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.register-editor__access {
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.register-editor__value-cell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.register-editor__value-input {
+  min-width: 138px;
+}
+
+.register-editor__value-input--changed {
+  border-color: rgba(239, 68, 68, 0.28);
+  color: #ffaaaa;
+  background: rgba(239, 68, 68, 0.08);
+}
+
+.register-editor__value-input--dirty {
+  border-color: rgba(245, 158, 11, 0.3);
+}
+
+.register-editor__value-input--invalid {
+  border-color: rgba(239, 68, 68, 0.44);
+}
+
+.register-editor__delta {
+  color: #ff8a8a;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.register-editor__raw {
+  color: var(--text-primary);
+}
+
+.register-editor__raw--unresolved {
+  color: var(--color-warning);
+}
+
+.register-editor__description {
+  color: var(--text-secondary);
+  line-height: 1.45;
+}
+
+.register-editor__empty {
+  padding: 56px 20px;
+  color: var(--text-tertiary);
+  text-align: center;
+}
+
+@media (max-width: 1180px) {
+  .register-editor__toolbar {
+    align-items: stretch;
+  }
+
+  .register-editor__toolbar-left,
+  .register-editor__toolbar-right {
+    width: 100%;
+  }
+
+  .register-editor__field--search {
+    min-width: 100%;
+  }
+}
+
+@media (max-width: 720px) {
+  .register-editor__poll-box {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .register-editor__actions {
+    width: 100%;
+  }
+
+  .register-editor__actions .btn {
+    flex: 1 1 0;
+  }
+
+  .register-editor__value-cell {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}

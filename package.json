@@ -1,0 +1,57 @@
+{
+  "name": "rh850-pilot",
+  "version": "1.0.0",
+  "description": "RH850 MCU Board Control & Testing Desktop Application",
+  "main": "electron/main.js",
+  "homepage": "./",
+  "scripts": {
+    "start:react": "react-scripts start",
+    "build:react": "react-scripts build",
+    "start:electron": "node scripts/start-electron.js",
+    "dev": "concurrently \"npm run start:react\" \"wait-on http://localhost:3000 && npm run start:electron\"",
+    "build": "npm run build:react && electron-builder",
+    "test": "react-scripts test"
+  },
+  "dependencies": {
+    "@types/node": "^20.10.0",
+    "@types/react": "^18.2.0",
+    "@types/react-dom": "^18.2.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-router-dom": "^6.20.0",
+    "react-scripts": "5.0.1",
+    "recharts": "^2.10.0",
+    "recoil": "^0.7.7",
+    "serialport": "^12.0.0",
+    "typescript": "^4.9.5"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.0",
+    "cross-env": "^7.0.3",
+    "electron": "^28.3.3",
+    "electron-builder": "^24.9.0",
+    "wait-on": "^7.2.0"
+  },
+  "build": {
+    "appId": "com.rh850pilot.app",
+    "productName": "RH850 Pilot",
+    "files": [
+      "build/**/*",
+      "electron/**/*",
+      "node_modules/**/*"
+    ],
+    "directories": {
+      "buildResources": "public"
+    }
+  },
+  "browserslist": {
+    "production": [
+      ">0.2%",
+      "not dead",
+      "not op_mini all"
+    ],
+    "development": [
+      "last 1 chrome version"
+    ]
+  }
+}

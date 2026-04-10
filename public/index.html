@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#060b18" />
+    <meta name="description" content="RH850 MCU Board Control & Testing Desktop Application" />
+    <title>RH850 Pilot</title>
+    <style>
+      /* 초기 로딩 화면 */
+      body { margin: 0; background: #060b18; }
+      #splash {
+        position: fixed; inset: 0; z-index: 9999;
+        display: flex; flex-direction: column;
+        align-items: center; justify-content: center;
+        background: #060b18; color: #60a5fa;
+        font-family: -apple-system, sans-serif;
+        transition: opacity 0.3s;
+      }
+      #splash .logo {
+        width: 56px; height: 56px; border-radius: 10px;
+        background: linear-gradient(135deg, #2563eb, #60a5fa);
+        display: flex; align-items: center; justify-content: center;
+        font-size: 18px; font-weight: 800; color: #fff;
+        font-family: monospace; margin-bottom: 16px;
+      }
+      #splash .name { font-size: 18px; font-weight: 600; letter-spacing: 1px; }
+      #splash .sub { font-size: 12px; color: #64748b; margin-top: 4px; }
+    </style>
+  </head>
+  <body>
+    <div id="splash">
+      <div class="logo">R8</div>
+      <div class="name">RH850 Pilot</div>
+      <div class="sub">MCU Control Suite</div>
+    </div>
+    <div id="root"></div>
+    <script>
+      // React 로드 완료 시 스플래시 제거
+      const observer = new MutationObserver(() => {
+        const root = document.getElementById('root');
+        if (root && root.children.length > 0) {
+          const splash = document.getElementById('splash');
+          if (splash) {
+            splash.style.opacity = '0';
+            setTimeout(() => splash.remove(), 300);
+          }
+          observer.disconnect();
+        }
+      });
+      observer.observe(document.getElementById('root'), { childList: true });
+    </script>
+  </body>
+</html>
