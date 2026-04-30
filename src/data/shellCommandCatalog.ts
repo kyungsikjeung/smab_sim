@@ -43,6 +43,8 @@ export const shellCommandCatalog: ShellCommandDefinition[] = [
   { command: 'simlightw', handler: 'cmd_simlightw', category: 'System / Diagnostic', module: 'test_commands.c', description: 'light write 경로 시뮬레이션 테스트' },
   { command: 'simlightr', handler: 'cmd_simlightr', category: 'System / Diagnostic', module: 'test_commands.c', description: 'light read 경로 시뮬레이션 테스트' },
   { command: 'wdt_fault', handler: 'cmd_wdt_fault', category: 'System / Diagnostic', module: 'test_commands.c', description: 'WDT/ECM reset 경로 테스트', syntax: 'wdt_fault' },
+  { command: 'lram_ecc_inj', handler: 'cmd_lram_ecc_inj', category: 'System / Diagnostic', module: 'test_commands.c', description: 'LRAM ECC Safety Test', syntax: 'lram_ecc_inj der' },
+  { command: 'rohm_fw', handler: 'cmd_rohm_fw', category: 'System / Diagnostic', module: 'test_rohm_commands.c', description: 'ROHM FW checksum mismatch safety test', syntax: 'rohm_fw fault' },
 
   { command: 'mcu_flash_id', handler: 'cmd_mcu_flash_id', category: 'SPI / Flash', module: 'test_commands.c', description: 'MCU Flash JEDEC ID 읽기' },
   { command: 'rohm_flash_id', handler: 'cmd_rohm_flash_id', category: 'SPI / Flash', module: 'test_commands.c', description: 'ROHM Flash JEDEC ID 읽기' },

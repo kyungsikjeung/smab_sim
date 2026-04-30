@@ -9,7 +9,7 @@ import {
 import { VoltMonThresholdChannel } from 'types';
 import './FaultInjection.css';
 
-type FaultSectionKey = 'adc' | 'wdg';
+type FaultSectionKey = 'adc' | 'wdg' | 'ecc' | 'rohmFw';
 
 interface ChannelDraft {
   high: string;
@@ -22,7 +22,11 @@ const MAX_VOLTAGE = 3.3;
 const MIN_VOLTAGE = 0;
 const VOLT_MON_READ_COMMAND = 'voltmon read';
 const WATCHDOG_INJECT_COMMAND = 'wdt_fault inject';
+const ECC_DOUBLE_ERROR_COMMAND = 'lram_ecc_inj der';
+const ROHM_FW_CHECKSUM_INJECT_COMMAND = 'rohm_fw fault';
 const WATCHDOG_BUSY_HOLD_MS = 250;
+const ECC_BUSY_HOLD_MS = 250;
+const ROHM_FW_BUSY_HOLD_MS = 1000;
 const DEFAULT_RANGE = { low: '0.00', high: '3.30' };
 
 const buildDraftsFromThresholds = (
@@ -89,15 +93,20 @@ const FaultInjectionPage: React.FC = () => {
   const [expandedSections, setExpandedSections] = useState<Record<FaultSectionKey, boolean>>({
     adc: false,
     wdg: false,
+    ecc: false,
+    rohmFw: false,
   });
   const [channelDrafts, setChannelDrafts] = useState<ChannelDraftMap>(() => buildDraftsFromThresholds(voltMonThresholds));
   const [bulkRange, setBulkRange] = useState(DEFAULT_RANGE);
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const [watchdogBusy, setWatchdogBusy] = useState(false);
+  const [eccBusy, setEccBusy] = useState(false);
+  const [rohmChecksumBusy, setRohmChecksumBusy] = useState(false);
   const [draftSyncSuspended, setDraftSyncSuspended] = useState(false);
   const mountedRef = useRef(true);
   const voltMonReadInFlightRef = useRef(false);
   const voltMonAutoSyncDoneRef = useRef(false);
+  const rohmChecksumBusyTimerRef = useRef<number | null>(null);
 
   const setBusyKeySafely = useCallback((nextBusyKey: string | null) => {
     if (!mountedRef.current) return;
@@ -105,9 +114,15 @@ const FaultInjectionPage: React.FC = () => {
   }, []);
 
   useEffect(() => {
+    mountedRef.current = true;
+
     return () => {
       mountedRef.current = false;
       voltMonReadInFlightRef.current = false;
+      if (rohmChecksumBusyTimerRef.current !== null) {
+        window.clearTimeout(rohmChecksumBusyTimerRef.current);
+        rohmChecksumBusyTimerRef.current = null;
+      }
     };
   }, []);
 
@@ -367,16 +382,86 @@ const FaultInjectionPage: React.FC = () => {
       });
   }, [ensureConnected, send, setToast, watchdogBusy]);
 
+  const handleEccDoubleErrorInject = useCallback(async () => {
+    if (!ensureConnected() || eccBusy) return;
+
+    setEccBusy(true);
+    setToast({ type: 'info', message: `${ECC_DOUBLE_ERROR_COMMAND}를 전송했습니다.` });
+
+    let released = false;
+    const releaseBusy = () => {
+      if (released || !mountedRef.current) return;
+      released = true;
+      setEccBusy(false);
+    };
+
+    const timeoutId = window.setTimeout(() => {
+      releaseBusy();
+    }, ECC_BUSY_HOLD_MS);
+
+    void send(ECC_DOUBLE_ERROR_COMMAND)
+      .then((result) => {
+        if (!result.success) {
+          window.clearTimeout(timeoutId);
+          setToast({ type: 'error', message: result.error || 'Local RAM ECC Test 명령 전송에 실패했습니다.' });
+          releaseBusy();
+          return;
+        }
+
+        setToast({
+          type: 'warning',
+          message: 'Local RAM ECC Test를 실행했습니다. Power on Reset으로 정상 복구됩니다.',
+        });
+      })
+      .finally(() => {
+        window.clearTimeout(timeoutId);
+        releaseBusy();
+      });
+  }, [eccBusy, ensureConnected, send, setToast]);
+
+  const handleRohmChecksumInject = useCallback(async () => {
+    if (!ensureConnected()) return;
+
+    setRohmChecksumBusy(true);
+    setToast({ type: 'info', message: `${ROHM_FW_CHECKSUM_INJECT_COMMAND}를 전송했습니다.` });
+
+    if (rohmChecksumBusyTimerRef.current !== null) {
+      window.clearTimeout(rohmChecksumBusyTimerRef.current);
+    }
+
+    rohmChecksumBusyTimerRef.current = window.setTimeout(() => {
+      if (mountedRef.current) {
+        setRohmChecksumBusy(false);
+      }
+      rohmChecksumBusyTimerRef.current = null;
+    }, ROHM_FW_BUSY_HOLD_MS);
+
+    try {
+      const result = await send(ROHM_FW_CHECKSUM_INJECT_COMMAND);
+      if (!result.success) {
+        setToast({ type: 'error', message: result.error || 'Rohm IC FW Data Checksum Test 명령 전송에 실패했습니다.' });
+        return;
+      }
+
+      setToast({
+        type: 'warning',
+        message: 'Fault Injection을 위해 Power on Reset을 해주세요.',
+      });
+    } finally {
+      // busy 해제는 응답과 무관하게 타이머가 담당합니다.
+    }
+  }, [ensureConnected, send, setToast]);
+
   return (
     <div className="fault-injection">
       <section className="card fault-injection__hero">
-        <div>
-          <div className="fault-injection__eyebrow">Safety Tools</div>
-          <div className="card__title">Fault Injection</div>
-          <div className="fault-injection__hero-text">
-            VoltMon threshold 관리와 Watchdog fault inject를 한 화면에서 다룹니다.
+          <div>
+            <div className="fault-injection__eyebrow">Safety Tools</div>
+            <div className="card__title">Fault Injection</div>
+            <div className="fault-injection__hero-text">
+            VoltMon threshold, WDT Fault Inject, Local RAM ECC Test, Rohm IC FW Data Checksum Test를 한 화면에서 다룹니다.
+            </div>
           </div>
-        </div>
 
         <div className={`fault-injection__hero-status ${connected ? 'fault-injection__hero-status--connected' : 'fault-injection__hero-status--disconnected'}`}>
           {connected ? 'Serial Connected' : 'Serial Disconnected'}
@@ -544,7 +629,10 @@ const FaultInjectionPage: React.FC = () => {
         <button className="fault-accordion__header" type="button" onClick={() => toggleSection('wdg')}>
           <div>
             <div className="fault-accordion__eyebrow">WDG</div>
-            <div className="card__title">Watchdog Feed Action</div>
+            <div className="card__title">WDT FAULT INJECT</div>
+            <div className="fault-accordion__description">
+              Watchdog의 Feed를 중단하여 시스템 멈춤 현상을 재현합니다.
+            </div>
           </div>
 
           <div className="fault-accordion__header-meta">
@@ -555,15 +643,115 @@ const FaultInjectionPage: React.FC = () => {
 
         {expandedSections.wdg && (
           <div className="fault-accordion__body">
-            <div className="fault-injection__toolbar-actions">
-              <button
-                className="btn btn--danger"
-                type="button"
-                onClick={() => void handleWatchdogInject()}
-                disabled={!connected || watchdogBusy}
-              >
-                {watchdogBusy ? '전송 중...' : 'Feed 중지'}
-              </button>
+            <div className="fault-injection__action-card fault-injection__action-card--danger">
+              <div>
+                <div className="fault-injection__action-title">WDT FAULT INJECT</div>
+                <div className="fault-injection__action-text">
+                  Command: <code>{WATCHDOG_INJECT_COMMAND}</code>
+                </div>
+                <div className="fault-injection__command-note">
+                  시스템 멈춤 현상 재현 후 SOFTWARE RESET으로 정상 복구됩니다.
+                </div>
+              </div>
+
+              <div className="fault-injection__toolbar-actions">
+                <button
+                  className="btn btn--danger"
+                  type="button"
+                  onClick={() => void handleWatchdogInject()}
+                  disabled={!connected || watchdogBusy}
+                >
+                  {watchdogBusy ? '전송 중...' : 'Feed 중지'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </section>
+
+      <section className={`card fault-accordion ${expandedSections.ecc ? 'fault-accordion--open' : ''}`}>
+        <button className="fault-accordion__header" type="button" onClick={() => toggleSection('ecc')}>
+          <div>
+            <div className="fault-accordion__eyebrow">ECC</div>
+            <div className="card__title">Local RAM ECC Test</div>
+            <div className="fault-accordion__description">
+              Local RAM PE0의 2bit 데이터를 변경하여 ECC 에러를 주입합니다.
+            </div>
+          </div>
+
+          <div className="fault-accordion__header-meta">
+            <span className="badge badge--error">Safety Test</span>
+            <span className="fault-accordion__chevron">{expandedSections.ecc ? '▾' : '▸'}</span>
+          </div>
+        </button>
+
+        {expandedSections.ecc && (
+          <div className="fault-accordion__body">
+            <div className="fault-injection__action-card fault-injection__action-card--danger">
+              <div>
+                <div className="fault-injection__action-title">Local RAM ECC Test</div>
+                <div className="fault-injection__action-text">
+                  Command: <code>{ECC_DOUBLE_ERROR_COMMAND}</code>
+                </div>
+                <div className="fault-injection__command-note">
+                  1비트 에러는 자동 정정되며, 2비트 에러는 정정할 수 없습니다. Power on Reset으로 정상 복구됩니다.
+                </div>
+              </div>
+
+              <div className="fault-injection__toolbar-actions">
+                <button
+                  className="btn btn--danger"
+                  type="button"
+                  onClick={() => void handleEccDoubleErrorInject()}
+                  disabled={!connected || eccBusy}
+                >
+                  {eccBusy ? '전송 중...' : 'Safety Test 실행'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </section>
+
+      <section className={`card fault-accordion ${expandedSections.rohmFw ? 'fault-accordion--open' : ''}`}>
+        <button className="fault-accordion__header" type="button" onClick={() => toggleSection('rohmFw')}>
+          <div>
+            <div className="fault-accordion__eyebrow">ROHM FW</div>
+            <div className="card__title">Rohm IC FW Data Checksum Test</div>
+            <div className="fault-accordion__description">
+              Rohm IC FW Data의 Checksum 값을 변경하여 오류를 유도하고, Safety MCU의 복구 동작을 확인합니다.
+            </div>
+          </div>
+
+          <div className="fault-accordion__header-meta">
+            <span className="badge badge--error">Safety Test</span>
+            <span className="fault-accordion__chevron">{expandedSections.rohmFw ? '▾' : '▸'}</span>
+          </div>
+        </button>
+
+        {expandedSections.rohmFw && (
+          <div className="fault-accordion__body">
+            <div className="fault-injection__action-card fault-injection__action-card--danger">
+              <div>
+                <div className="fault-injection__action-title">Rohm IC FW Data Checksum Test</div>
+                <div className="fault-injection__action-text">
+                  Command: <code>{ROHM_FW_CHECKSUM_INJECT_COMMAND}</code>
+                </div>
+                <div className="fault-injection__command-note">
+                  Rohm IC의 Checksum 값을 변경하여 오류를 유도합니다. 펌웨어 무결성 검증에 실패하면 Safety MCU가 이를 이상 상태로 판단하고,
+                  정상 펌웨어를 다시 쓰는 복구 시퀀스가 시작되는지 확인합니다.
+                </div>
+              </div>
+
+              <div className="fault-injection__toolbar-actions">
+                <button
+                  className="btn btn--danger"
+                  type="button"
+                  onClick={() => void handleRohmChecksumInject()}
+                >
+                  {rohmChecksumBusy ? '전송 중...' : 'Safety Test 실행'}
+                </button>
+              </div>
             </div>
           </div>
         )}

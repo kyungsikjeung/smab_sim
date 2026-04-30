@@ -11,6 +11,10 @@ import {
   SequencePythonScript,
   TestSequence,
 } from 'types';
+import {
+  TEST_AUTOMATION_SAMPLE_PYTHON,
+  TEST_AUTOMATION_SAMPLE_PYTHON_FILE_NAME,
+} from 'data/testAutomationSamplePython';
 import { formatDateTime, formatTimeWithMilliseconds } from 'utils/dateTime';
 import './TestAutomation.css';
 
@@ -65,6 +69,14 @@ const UploadIcon: React.FC<IconProps> = ({ className }) => (
     <path d="M12 16V4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
     <path d="m7 9 5-5 5 5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
     <path d="M20 16.5V19a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-2.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>
+);
+
+const DownloadIcon: React.FC<IconProps> = ({ className }) => (
+  <svg className={className} viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <path d="M12 4v12" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+    <path d="m7 11 5 5 5-5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+    <path d="M20 20H4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
   </svg>
 );
 
@@ -220,8 +232,8 @@ const buildSequenceLibraryPayload = (sequences: TestSequence[]) => {
   return JSON.stringify(payload, null, 2);
 };
 
-const downloadTextFile = (fileName: string, content: string) => {
-  const blob = new Blob([content], { type: 'application/json;charset=utf-8' });
+const downloadTextFile = (fileName: string, content: string, type = 'text/plain;charset=utf-8') => {
+  const blob = new Blob([content], { type });
   const objectUrl = window.URL.createObjectURL(blob);
   const anchor = document.createElement('a');
   anchor.href = objectUrl;
@@ -575,6 +587,17 @@ const TestAutomationPage: React.FC = () => {
     setScriptConsole([]);
   }, []);
 
+  const downloadSamplePythonScript = useCallback(() => {
+    downloadTextFile(
+      TEST_AUTOMATION_SAMPLE_PYTHON_FILE_NAME,
+      TEST_AUTOMATION_SAMPLE_PYTHON,
+      'text/x-python;charset=utf-8'
+    );
+    const message = `${TEST_AUTOMATION_SAMPLE_PYTHON_FILE_NAME} 다운로드 완료`;
+    setRunSummary(message);
+    setToast({ type: 'info', message });
+  }, [setToast]);
+
   const exportSequenceLibrary = useCallback(() => {
     if (sequences.length === 0) {
       const message = '저장할 시퀀스가 없습니다.';
@@ -584,7 +607,11 @@ const TestAutomationPage: React.FC = () => {
     }
 
     try {
-      downloadTextFile(buildExportFileName(), buildSequenceLibraryPayload(sequences));
+      downloadTextFile(
+        buildExportFileName(),
+        buildSequenceLibraryPayload(sequences),
+        'application/json;charset=utf-8'
+      );
       const message = `시퀀스 JSON 저장 완료 · ${sequences.length}개`;
       setRunSummary(message);
       setToast({ type: 'success', message });
@@ -879,6 +906,10 @@ const TestAutomationPage: React.FC = () => {
                         </div>
                       </div>
                       <div className="test__script-actions">
+                        <button className="btn btn--ghost btn--sm" onClick={downloadSamplePythonScript} type="button">
+                          <DownloadIcon className="test__button-icon" />
+                          Sample .py
+                        </button>
                         <label className="btn btn--secondary btn--sm test__script-upload">
                           <UploadIcon className="test__button-icon" />
                           Replace .py
@@ -913,11 +944,17 @@ const TestAutomationPage: React.FC = () => {
                       <div className="test__script-callout-text">
                         이 시퀀스는 `.py` 파일만 실행합니다.
                       </div>
-                      <label className="btn btn--primary btn--sm test__script-upload">
-                        <UploadIcon className="test__button-icon" />
-                        Upload .py
-                        <input type="file" accept=".py" onChange={handleScriptUpload} hidden />
-                      </label>
+                      <div className="test__script-callout-actions">
+                        <label className="btn btn--primary btn--sm test__script-upload">
+                          <UploadIcon className="test__button-icon" />
+                          Upload .py
+                          <input type="file" accept=".py" onChange={handleScriptUpload} hidden />
+                        </label>
+                        <button className="btn btn--ghost btn--sm test__sample-download" onClick={downloadSamplePythonScript} type="button">
+                          <DownloadIcon className="test__button-icon" />
+                          Sample .py
+                        </button>
+                      </div>
                     </div>
                   </div>
                 )}

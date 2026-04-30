@@ -934,6 +934,12 @@
   gap: 10px;
 }
 
+.test__script-callout-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .test__script-callout-title {
   color: var(--text-primary);
   font-size: 15px;

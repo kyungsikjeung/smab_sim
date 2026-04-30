@@ -101,6 +101,30 @@ function getCoverRect(viewWidth, viewHeight, sourceWidth, sourceHeight) {
   };
 }
 
+function getDisplayBaseRect() {
+  return getCoverRect(
+    state.viewportWidth,
+    state.viewportHeight,
+    CONFIG.background.baseWidth,
+    CONFIG.background.baseHeight
+  );
+}
+
+function mapOverlayToViewport(overlay) {
+  const displayRect = getDisplayBaseRect();
+  const scaleX = displayRect.width / CONFIG.background.baseWidth;
+  const scaleY = displayRect.height / CONFIG.background.baseHeight;
+
+  return {
+    ...overlay,
+    height: overlay.height * scaleY,
+    scale: Math.min(scaleX, scaleY),
+    width: overlay.width * scaleX,
+    x: displayRect.x + overlay.x * scaleX,
+    y: displayRect.y + overlay.y * scaleY,
+  };
+}
+
 function triangleOffset(frame, travel, stepPerFrame) {
   if (travel <= 0 || stepPerFrame <= 0) {
     return 0;
@@ -253,18 +277,22 @@ function drawOverlayLabel(overlay) {
   const overlayName = overlay.source || overlay.label || "";
   const labelText = overlayName ? `${overlayId} ${overlayName}` : overlayId;
   const { labelFontPx, labelFill, labelPaddingX, labelPaddingY } = CONFIG.overlay;
+  const scale = Number.isFinite(overlay.scale) && overlay.scale > 0 ? overlay.scale : 1;
+  const fontPx = Math.max(8, Math.round(labelFontPx * scale));
+  const paddingX = Math.max(4, Math.round(labelPaddingX * scale));
+  const paddingY = Math.max(3, Math.round(labelPaddingY * scale));
   const labelWidth = Math.max(48, Math.min(160, overlay.width || 48));
-  const labelHeight = labelFontPx + labelPaddingY * 2;
+  const labelHeight = fontPx + paddingY * 2;
   const labelX = overlay.x;
   const labelY = overlay.y >= labelHeight + 8 ? overlay.y - labelHeight - 6 : overlay.y + 6;
 
   ctx.save();
-  ctx.font = `700 ${labelFontPx}px Consolas, "Courier New", monospace`;
+  ctx.font = `700 ${fontPx}px Consolas, "Courier New", monospace`;
   ctx.textBaseline = "middle";
   ctx.fillStyle = labelFill;
   ctx.fillRect(labelX, labelY, labelWidth, labelHeight);
   ctx.fillStyle = getOverlayContrastColor(overlay.color);
-  ctx.fillText(labelText, labelX + labelPaddingX, labelY + Math.round(labelHeight / 2));
+  ctx.fillText(labelText, labelX + paddingX, labelY + Math.round(labelHeight / 2));
   ctx.restore();
 }
 
@@ -280,13 +308,15 @@ function drawSingleOverlayRect(overlay) {
     return;
   }
 
+  const viewportOverlay = mapOverlayToViewport(overlay);
+
   ctx.save();
   ctx.fillStyle = hexToRgba(overlay.color || "#ff3b30", CONFIG.overlay.fillAlpha);
   ctx.strokeStyle = getOverlayContrastColor(overlay.color);
   ctx.lineWidth = CONFIG.overlay.lineWidth;
-  ctx.fillRect(overlay.x, overlay.y, overlay.width, overlay.height);
-  ctx.strokeRect(overlay.x, overlay.y, overlay.width, overlay.height);
-  drawOverlayLabel(overlay);
+  ctx.fillRect(viewportOverlay.x, viewportOverlay.y, viewportOverlay.width, viewportOverlay.height);
+  ctx.strokeRect(viewportOverlay.x, viewportOverlay.y, viewportOverlay.width, viewportOverlay.height);
+  drawOverlayLabel(viewportOverlay);
   ctx.restore();
 }
 

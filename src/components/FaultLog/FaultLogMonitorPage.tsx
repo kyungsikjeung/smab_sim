@@ -9,6 +9,7 @@ import './FaultLogMonitor.css';
 
 const FAULT_LOG_COMMAND = 'flog latest';
 const RESPONSE_IDLE_TIMEOUT_MS = 3000;
+const AUTO_MONITOR_INTERVAL_MS = 2000;
 
 const getTerminalLineEpoch = (lineId: string) => {
   const match = lineId.match(/^line-(\d+)-/);
@@ -48,6 +49,8 @@ const FaultLogMonitorPage: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [lastSyncedAt, setLastSyncedAt] = useState<number | null>(null);
   const [requestStartedAt, setRequestStartedAt] = useState<number | null>(null);
+  const [isMonitoring, setIsMonitoring] = useState(false);
+  const monitorIntervalRef = useRef<number | null>(null);
 
   const parseResult = useMemo(
     () => parseFaultLogResponseLines(capturedRxLines),
@@ -155,6 +158,71 @@ const FaultLogMonitorPage: React.FC = () => {
     }
   }, [connected, send, setToast]);
 
+  const handleMonitorToggle = useCallback(() => {
+    if (!connected) {
+      setToast({ type: 'warning', message: '포트를 먼저 연결해주세요.' });
+      return;
+    }
+
+    if (isMonitoring) {
+      setIsMonitoring(false);
+      setToast({ type: 'info', message: '최근 에러 5건 모니터링을 중지했습니다.' });
+      return;
+    }
+
+    setIsMonitoring(true);
+    setToast({
+      type: 'success',
+      message: `최근 에러 5건 모니터링을 시작했습니다. (${AUTO_MONITOR_INTERVAL_MS / 1000}초 간격)`,
+    });
+    void handleReadLatest();
+  }, [connected, handleReadLatest, isMonitoring, setToast]);
+
+  useEffect(() => {
+    if (!connected && isMonitoring) {
+      setIsMonitoring(false);
+      setToast({ type: 'warning', message: '시리얼 연결이 끊겨 모니터링이 중단되었습니다.' });
+    }
+  }, [connected, isMonitoring, setToast]);
+
+  useEffect(() => {
+    if (!isMonitoring || !connected) {
+      if (monitorIntervalRef.current !== null) {
+        window.clearInterval(monitorIntervalRef.current);
+        monitorIntervalRef.current = null;
+      }
+      return;
+    }
+
+    if (loading) {
+      return;
+    }
+
+    if (monitorIntervalRef.current !== null) {
+      return;
+    }
+
+    monitorIntervalRef.current = window.setInterval(() => {
+      if (isMonitoring && connected && !loading) {
+        void handleReadLatest();
+      }
+    }, AUTO_MONITOR_INTERVAL_MS);
+
+    return () => {
+      if (monitorIntervalRef.current !== null) {
+        window.clearInterval(monitorIntervalRef.current);
+        monitorIntervalRef.current = null;
+      }
+    };
+  }, [connected, handleReadLatest, isMonitoring, loading]);
+
+  useEffect(() => {
+    if (!isMonitoring && monitorIntervalRef.current !== null) {
+      window.clearInterval(monitorIntervalRef.current);
+      monitorIntervalRef.current = null;
+    }
+  }, [isMonitoring]);
+
   const handleClear = useCallback(() => {
     seenRxLineIdsRef.current.clear();
     setCapturedRxLines([]);
@@ -191,9 +259,18 @@ const FaultLogMonitorPage: React.FC = () => {
 
   const statusText = loading
     ? '수집 중'
-    : lastSyncedAt
+    : isMonitoring
+      ? '자동 모니터링 대기'
+      : lastSyncedAt
       ? `${formatTimeWithMilliseconds(lastSyncedAt)} 동기화`
       : 'Idle';
+
+  const statusClassNameModifier = loading
+    ? 'fault-log-monitor__status-pill--live'
+    : isMonitoring
+      ? 'fault-log-monitor__status-pill--monitor'
+      : '';
+  const statusClassName = ['fault-log-monitor__status-pill', statusClassNameModifier].filter(Boolean).join(' ');
 
   return (
     <div className="fault-log-monitor">
@@ -207,7 +284,7 @@ const FaultLogMonitorPage: React.FC = () => {
             </p>
           </div>
 
-          <div className={`fault-log-monitor__status-pill ${loading ? 'fault-log-monitor__status-pill--live' : ''}`}>
+          <div className={statusClassName}>
             {statusText}
           </div>
         </div>
@@ -221,6 +298,9 @@ const FaultLogMonitorPage: React.FC = () => {
           <div className="fault-log-monitor__toolbar-actions">
             <button className="btn btn--primary" type="button" onClick={handleReadLatest} disabled={!connected || loading}>
               최근 5건 조회
+            </button>
+            <button className="btn btn--secondary" type="button" onClick={handleMonitorToggle} disabled={!connected}>
+              {isMonitoring ? '모니터링 중지' : '모니터링 시작'}
             </button>
             <button className="btn btn--secondary" type="button" onClick={handleClear} disabled={!loading && capturedRxLines.length === 0 && parseResult.rawLines.length === 0}>
               Clear
@@ -270,7 +350,7 @@ const FaultLogMonitorPage: React.FC = () => {
         <section className="card fault-log-monitor__empty-state">
           <div className="fault-log-monitor__empty-title">에러 로그 기록이 없습니다.</div>
           <div className="fault-log-monitor__empty-text">
-            상단 <strong>최근 5건 조회</strong> 버튼을 눌러 `flog latest` 응답을 가져오세요.
+            상단 <strong>최근 5건 조회</strong> 또는 <strong>모니터링 시작</strong>으로 `flog latest` 응답을 가져오세요.
           </div>
         </section>
       ) : (

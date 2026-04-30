@@ -12,6 +12,9 @@ import {
 import { useSerial } from 'hooks/useSerial';
 import './Terminal.css';
 
+const TERMINAL_HISTORY_STORAGE_KEY = 'terminal-command-history';
+const TERMINAL_HISTORY_LIMIT = 10;
+
 const FILTERS = [
   { key: 'all',    label: 'ALL' },
   { key: 'rx',     label: 'RX' },
@@ -56,6 +59,35 @@ const buildDownloadFileStamp = () => {
   ].join('');
 };
 
+const readStoredCommandHistory = (): string[] => {
+  if (typeof window === 'undefined') return [];
+
+  try {
+    const rawValue = window.localStorage.getItem(TERMINAL_HISTORY_STORAGE_KEY);
+    if (!rawValue) return [];
+
+    const parsed = JSON.parse(rawValue);
+    if (!Array.isArray(parsed)) return [];
+
+    return parsed
+      .filter((value): value is string => typeof value === 'string')
+      .map((value) => value.trim())
+      .filter(Boolean)
+      .slice(0, TERMINAL_HISTORY_LIMIT);
+  } catch {
+    return [];
+  }
+};
+
+const writeStoredCommandHistory = (history: string[]) => {
+  if (typeof window === 'undefined') return;
+
+  window.localStorage.setItem(
+    TERMINAL_HISTORY_STORAGE_KEY,
+    JSON.stringify(history.slice(0, TERMINAL_HISTORY_LIMIT))
+  );
+};
+
 const TerminalPage: React.FC = () => {
   const { send, connected } = useSerial();
   const terminalLines = useRecoilValue(terminalLinesState);
@@ -67,8 +99,15 @@ const TerminalPage: React.FC = () => {
   const [timestampVisible, setTimestampVisible] = useRecoilState(terminalTimestampVisibleState);
   const [searchQuery, setSearchQuery] = useRecoilState(terminalSearchQueryState);
   const [inputValue, setInputValue] = useState('');
+  const [commandHistory, setCommandHistory] = useState<string[]>(() => readStoredCommandHistory());
+  const [historyIndex, setHistoryIndex] = useState(-1);
 
   const logRef = useRef<HTMLDivElement>(null);
+  const draftInputRef = useRef('');
+
+  useEffect(() => {
+    writeStoredCommandHistory(commandHistory);
+  }, [commandHistory]);
 
   // Auto-scroll
   useEffect(() => {
@@ -77,15 +116,64 @@ const TerminalPage: React.FC = () => {
     }
   }, [filteredLines, autoScroll]);
 
+  const pushCommandHistory = useCallback((command: string) => {
+    setCommandHistory((prev) => {
+      const normalized = command.trim();
+      if (!normalized) return prev;
+
+      return [
+        normalized,
+        ...prev.filter((entry) => entry !== normalized),
+      ].slice(0, TERMINAL_HISTORY_LIMIT);
+    });
+  }, []);
+
   const handleSend = useCallback(() => {
     const cmd = inputValue.trim();
     if (!cmd) return;
+
     send(cmd);
+    pushCommandHistory(cmd);
     setInputValue('');
-  }, [inputValue, send]);
+    setHistoryIndex(-1);
+    draftInputRef.current = '';
+  }, [inputValue, pushCommandHistory, send]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') handleSend();
+    if (e.key === 'Enter') {
+      handleSend();
+      return;
+    }
+
+    if (e.key === 'ArrowUp') {
+      if (commandHistory.length === 0) return;
+
+      e.preventDefault();
+      if (historyIndex === -1) {
+        draftInputRef.current = inputValue;
+      }
+
+      const nextIndex = Math.min(historyIndex + 1, commandHistory.length - 1);
+      setHistoryIndex(nextIndex);
+      setInputValue(commandHistory[nextIndex] || '');
+      return;
+    }
+
+    if (e.key === 'ArrowDown') {
+      if (historyIndex === -1) return;
+
+      e.preventDefault();
+      const nextIndex = historyIndex - 1;
+
+      if (nextIndex < 0) {
+        setHistoryIndex(-1);
+        setInputValue(draftInputRef.current);
+        return;
+      }
+
+      setHistoryIndex(nextIndex);
+      setInputValue(commandHistory[nextIndex] || '');
+    }
   };
 
   const clearLog = () => setTerminalLines([]);
@@ -243,7 +331,12 @@ const TerminalPage: React.FC = () => {
           type="text"
           placeholder={connected ? '명령어 입력 후 Enter...' : '포트 연결 필요'}
           value={inputValue}
-          onChange={(e) => setInputValue(e.target.value)}
+          onChange={(e) => {
+            setInputValue(e.target.value);
+            if (historyIndex === -1) {
+              draftInputRef.current = e.target.value;
+            }
+          }}
           onKeyDown={handleKeyDown}
           disabled={!connected}
         />

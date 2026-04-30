@@ -216,6 +216,65 @@ class SerialService {
     return true;
   }
 
+  private handleMockWatchdogFault(command: string): boolean {
+    if (!/^wdt_fault(?:\s+inject)?\b/i.test(command)) return false;
+
+    this.mockErrorFlags = (this.mockErrorFlags | 0x00008000) >>> 0;
+
+    window.setTimeout(() => {
+      this.emitMockData('[wdt_fault] inject: watchdog feed stop requested');
+      this.emitMockData('[wdt_fault] ERROR_FLAG_WDG_FAIL set');
+      this.emitMockData('[wdt_fault] sticky until SOFTWARE RESET');
+      this.emitMockData(`[error] flags=${this.toNormalizedHex(this.mockErrorFlags)}`);
+    }, 30);
+
+    return true;
+  }
+
+  private handleMockLramEccInject(command: string): boolean {
+    if (!/^lram_ecc_inj\s+der\b/i.test(command)) return false;
+
+    this.mockErrorFlags = (this.mockErrorFlags | 0x00001000) >>> 0;
+
+    window.setTimeout(() => {
+      this.emitMockData('[lram_ecc_inj] DER: LRAM ECC Safety Test injected');
+      this.emitMockData('[lram_ecc_inj] ERROR_FLAG_RAM_ECC set');
+      this.emitMockData('[lram_ecc_inj] sticky until Power on Reset');
+      this.emitMockData(`[error] flags=${this.toNormalizedHex(this.mockErrorFlags)}`);
+    }, 30);
+
+    return true;
+  }
+
+  private handleMockRohmFwChecksumInject(command: string): boolean {
+    if (!/^rohm_fw\s+fault\b/i.test(command)) return false;
+
+    this.mockErrorFlags = (this.mockErrorFlags | 0x00100000) >>> 0;
+
+    window.setTimeout(() => {
+      this.emitMockData('[rohm_fw fault] ROHM FW checksum mismatch injected');
+      this.emitMockData('[rohm_fw fault] CHKSUM_FAIL detected on Rohm IC FW Data');
+      this.emitMockData('[rohm_fw fault] ERROR_FLAG_CS_FAIL set');
+      this.emitMockData('[rohm_fw fault] verify automatic recovery sequence');
+      this.emitMockData(`[error] flags=${this.toNormalizedHex(this.mockErrorFlags)}`);
+    }, 30);
+
+    return true;
+  }
+
+  private handleMockSoftwareReset(command: string): boolean {
+    if (!/^sw_reset\b/i.test(command)) return false;
+
+    window.setTimeout(() => {
+      this.mockErrorFlags = 0x00000000;
+      this.emitMockData('[SW_RESET] software reset requested');
+      this.emitMockData('[SW_RESET] system reboot sequence started');
+      this.emitMockData(`[error] flags=${this.toNormalizedHex(this.mockErrorFlags)}`);
+    }, 30);
+
+    return true;
+  }
+
   private handleMockGpioStatus(command: string): boolean {
     if (!/^gpio_status\b/i.test(command)) return false;
 
@@ -422,6 +481,10 @@ class SerialService {
       this.handleMockVoltMonRead(normalizedCommand)
       || this.handleMockVoltMonSet(normalizedCommand)
       || this.handleMockFaultOut(normalizedCommand)
+      || this.handleMockWatchdogFault(normalizedCommand)
+      || this.handleMockLramEccInject(normalizedCommand)
+      || this.handleMockRohmFwChecksumInject(normalizedCommand)
+      || this.handleMockSoftwareReset(normalizedCommand)
       || this.handleMockGpioStatus(normalizedCommand)
       || this.handleMockErrorRead(normalizedCommand)
       || this.handleMockSimLightRead(normalizedCommand)

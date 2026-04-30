@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef } from 'react';
-import { useRecoilState } from 'recoil';
-import { WARNING_LIGHT_COUNT, warningLightsState } from 'state/atoms';
+import { useRecoilState, useSetRecoilState } from 'recoil';
+import { WARNING_LIGHT_COUNT, warningLightsState, toastMessageState } from 'state/atoms';
 import { useSerial } from 'hooks/useSerial';
 import { WarningLight } from 'types';
 import './WarningLights.css';
@@ -17,6 +17,7 @@ const toLightsMask = (lights: WarningLight[]) => {
 const WarningLightsPage: React.FC = () => {
   const { send, connected } = useSerial();
   const [lights, setLights] = useRecoilState(warningLightsState);
+  const setToast = useSetRecoilState(toastMessageState);
   const activeCount = lights.filter((l) => l.isOn).length;
   const totalCount = lights.length || WARNING_LIGHT_COUNT;
   const syncRequestedRef = useRef(false);
@@ -38,12 +39,15 @@ const WarningLightsPage: React.FC = () => {
 
   const setLightsAndSend = useCallback(
     (nextLights: WarningLight[]) => {
-      setLights(nextLights);
-      if (connected) {
-        send(`lights ${toLightsMask(nextLights)}`);
+      if (!connected) {
+        setToast({ type: 'error', message: '시리얼 연결이 안되었습니다.' });
+        return;
       }
+
+      setLights(nextLights);
+      send(`lights ${toLightsMask(nextLights)}`);
     },
-    [connected, send, setLights]
+    [connected, send, setLights, setToast]
   );
 
   const toggleLight = useCallback(
@@ -83,9 +87,8 @@ const WarningLightsPage: React.FC = () => {
             role="button"
             tabIndex={0}
           >
-            <div className="warning__indicator" />
             <span className="warning__light-id">#{String(light.id).padStart(2, '0')}</span>
-            <span className="warning__light-label">{light.label}</span>
+            <div className="warning__indicator" />
           </div>
         ))}
       </div>

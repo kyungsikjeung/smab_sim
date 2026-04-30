@@ -107,6 +107,12 @@
   color: #fdba74;
 }
 
+.fault-log-monitor__status-pill--monitor {
+  border-color: rgba(34, 197, 94, 0.34);
+  background: rgba(34, 197, 94, 0.12);
+  color: #86efac;
+}
+
 .fault-log-monitor__toolbar {
   margin-top: 14px;
   flex-wrap: wrap;

@@ -30,7 +30,7 @@ const VSB_SELECT_NONE = 'none';
 const WARNING_LIGHT_SELECT_DEFAULT = 'default';
 const VSB_SAMPLE_FILE_NAME = 'Sample.json';
 const VSB_SAVE_FILE_NAME = 'VSB_COLOR.json';
-const MAX_SELECTABLE_DISPLAY_SLOT = 26;
+const MAX_SELECTABLE_DISPLAY_SLOT = 28;
 const VSB_COLOR_SWATCHES = [
   '#ffd60a',
   '#ffb300',
@@ -143,6 +143,7 @@ const DisplayControlPage: React.FC = () => {
       .filter((slot): slot is number => Number.isFinite(slot))
       .sort((left, right) => left - right)
   ), [activeOverlayRects]);
+  const osdSlotLimit = Math.min(DISPLAY_VSB_SLOT_COUNT, MAX_SELECTABLE_DISPLAY_SLOT);
   const selectableVsbPresets = useMemo(
     () => vsbPresets.filter((preset) => isSelectableDisplaySlot(preset.slot)),
     [vsbPresets]
@@ -313,19 +314,24 @@ const DisplayControlPage: React.FC = () => {
   const syncWarningLightsForSelection = useCallback(async (
     nextWarningLightSelection: string,
     nextVsbSlotSelection: string,
-    options?: { showToast?: boolean }
+    options?: { showToast?: boolean; notifyDisconnected?: boolean }
   ) => {
+    if (!connected) {
+      if (options?.notifyDisconnected !== false) {
+        setToast({ type: 'error', message: '시리얼 연결이 안되었습니다.' });
+      }
+      return;
+    }
+
     const nextLightSlot = resolveWarningLightSlot(nextWarningLightSelection, nextVsbSlotSelection);
     const nextLights = buildWarningLightsForSlot(warningLights, nextLightSlot);
 
     setWarningLights(nextLights);
 
-    if (connected) {
-      const result = await send(`lights ${toLightsMask(nextLights)}`);
-      if (!result.success) {
-        setToast({ type: 'error', message: result.error || '경고등 상태 반영에 실패했습니다.' });
-        return;
-      }
+    const result = await send(`lights ${toLightsMask(nextLights)}`);
+    if (!result.success) {
+      setToast({ type: 'error', message: result.error || '경고등 상태 반영에 실패했습니다.' });
+      return;
     }
 
     if (options?.showToast) {
@@ -339,11 +345,14 @@ const DisplayControlPage: React.FC = () => {
   const syncVsbSelections = useCallback(async (
     nextVsbSlotSelection: string,
     nextWarningLightSelection: string,
-    options?: { presets?: DisplayOverlayPreset[]; showToast?: boolean }
+    options?: { presets?: DisplayOverlayPreset[]; showToast?: boolean; notifyDisconnected?: boolean }
   ) => {
     const nextSlots = nextVsbSlotSelection === VSB_SELECT_NONE ? [] : [Number(nextVsbSlotSelection)];
     await syncPresetOverlays(nextSlots, { presets: options?.presets, showToast: options?.showToast });
-    await syncWarningLightsForSelection(nextWarningLightSelection, nextVsbSlotSelection, { showToast: false });
+    await syncWarningLightsForSelection(nextWarningLightSelection, nextVsbSlotSelection, {
+      showToast: false,
+      notifyDisconnected: options?.notifyDisconnected,
+    });
   }, [syncPresetOverlays, syncWarningLightsForSelection]);
 
   const handleWarningLightChange = useCallback((event: React.ChangeEvent<HTMLSelectElement>) => {
@@ -361,7 +370,7 @@ const DisplayControlPage: React.FC = () => {
   const handleClearVsbSelections = useCallback(() => {
     setSelectedWarningLight(VSB_SELECT_NONE);
     setSelectedVsbSlot(VSB_SELECT_NONE);
-    void syncVsbSelections(VSB_SELECT_NONE, VSB_SELECT_NONE, { showToast: true });
+    void syncVsbSelections(VSB_SELECT_NONE, VSB_SELECT_NONE, { showToast: true, notifyDisconnected: true });
   }, [syncVsbSelections]);
 
   const handleDownloadVsbSample = useCallback(() => {
@@ -419,13 +428,13 @@ const DisplayControlPage: React.FC = () => {
     await syncVsbSelections(selectedVsbSlot, selectedWarningLight, { presets: nextPresets, showToast: false });
   }, [selectedVsbPreset, selectedVsbSlot, selectedWarningLight, syncVsbSelections, vsbPresets]);
 
-  const handleVsbColorChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
-    void applySelectedVsbColor(event.target.value);
-  }, [applySelectedVsbColor]);
-
   const handleSelectVsbPaletteColor = useCallback((color: string) => {
     void applySelectedVsbColor(color);
   }, [applySelectedVsbColor]);
+
+  const handleToggleVsbAccordion = useCallback(() => {
+    setVsbAccordionOpen((prev) => !prev);
+  }, []);
 
   useEffect(() => {
     if (!connected || initReceived) return;
@@ -640,29 +649,45 @@ const DisplayControlPage: React.FC = () => {
       </div>
 
       <div className={`display__vsb-panel ${vsbAccordionOpen ? 'display__vsb-panel--open' : ''}`}>
-        <button className="display__vsb-header" type="button" onClick={() => setVsbAccordionOpen((prev) => !prev)}>
-          <div>
-            <div className="display__vsb-eyebrow">OSD 에러 확인</div>
-            <div className="display__vsb-title">Light 1~28 OSD 에러 위치 설정</div>
-            <div className="display__vsb-description">
-              Warning Light와 OSD 에러 위치를 연결해 확인합니다.
+        <div className="display__vsb-header">
+          <button className="display__vsb-header-main" type="button" onClick={handleToggleVsbAccordion}>
+            <div>
+              <div className="display__vsb-eyebrow">경고등 이미지 에러 확인</div>
+              <div className="display__vsb-title">Light 1~28 경고등 이미지 에러 위치 설정</div>
+              <div className="display__vsb-description">
+                Warning Light와 경고등 이미지 에러 위치를 연결해 확인합니다.
+              </div>
             </div>
-          </div>
+          </button>
 
           <div className="display__vsb-header-meta">
             <span className={`badge ${activeOverlayRects.length > 0 ? 'badge--error' : 'badge--info'}`}>
-              {activeOverlayRects.length} / {DISPLAY_VSB_SLOT_COUNT}
+              {activeOverlayRects.length} / {osdSlotLimit}
             </span>
-            <span className="display__vsb-chevron">{vsbAccordionOpen ? '▾' : '▸'}</span>
+            <button
+              className="btn btn--ghost btn--sm display__vsb-clear-button"
+              type="button"
+              onClick={handleClearVsbSelections}
+              disabled={vsbSyncing}
+            >
+              Clear(Default)
+            </button>
+            <button
+              className="display__vsb-chevron-button"
+              type="button"
+              onClick={handleToggleVsbAccordion}
+              aria-label={vsbAccordionOpen ? 'VSB 설정 접기' : 'VSB 설정 펼치기'}
+            >
+              <span className="display__vsb-chevron">{vsbAccordionOpen ? '▾' : '▸'}</span>
+            </button>
           </div>
-        </button>
+        </div>
 
         {vsbAccordionOpen && (
           <div className="display__vsb-body">
             <div className="display__vsb-toolbar">
               <div className="display__vsb-toolbar-text">
-                Warning Light가 "선택 안함"이면 전체 OFF입니다.
-                {' '}"Default"는 선택한 VSB와 같은 번호의 경고등을 ON으로 맞춥니다.
+                "Default"는 선택한 VSB와 같은 번호의 경고등을 ON으로 맞춥니다.
               </div>
               <div className="display__vsb-toolbar-actions">
                 <input
@@ -682,7 +707,7 @@ const DisplayControlPage: React.FC = () => {
                   Import JSON
                 </button>
                 <button className="btn btn--ghost btn--sm" type="button" onClick={handleClearVsbSelections} disabled={vsbSyncing}>
-                  선택 초기화
+                  Clear(Default)
                 </button>
               </div>
             </div>
@@ -728,22 +753,6 @@ const DisplayControlPage: React.FC = () => {
 
               <div className="display__vsb-field display__vsb-field--color">
                 <span className="display__vsb-field-label">VSB Color</span>
-                <div className="display__vsb-color-control">
-                  <input
-                    className="display__vsb-color-input"
-                    type="color"
-                    value={selectedVsbPreset?.color || '#ffffff'}
-                    onChange={handleVsbColorChange}
-                    disabled={!selectedVsbPreset || vsbSyncing}
-                  />
-                  <div className="display__vsb-color-readout">
-                    <span
-                      className="display__vsb-color-chip"
-                      style={{ backgroundColor: selectedVsbPreset?.color || '#ffffff' }}
-                    />
-                    <strong>{selectedVsbPreset?.color || 'VSB 선택 필요'}</strong>
-                  </div>
-                </div>
                 <div className="display__vsb-palette">
                   {VSB_COLOR_SWATCHES.map((color) => (
                     <button
@@ -763,30 +772,16 @@ const DisplayControlPage: React.FC = () => {
 
             <div className="display__vsb-selection-summary">
               <div className="display__vsb-stat">
-                <span className="display__vsb-stat-label">Warning Light</span>
-                <strong>{warningLightSummary}</strong>
-              </div>
-              <div className="display__vsb-stat">
-                <span className="display__vsb-stat-label">VSB</span>
-                <strong>{vsbSelectionSummary}</strong>
-              </div>
-              <div className="display__vsb-stat">
-                <span className="display__vsb-stat-label">Position</span>
-                <strong>{selectedVsbPreset ? `${selectedVsbPreset.x}, ${selectedVsbPreset.y}` : '--'}</strong>
-              </div>
-              <div className="display__vsb-stat">
                 <span className="display__vsb-stat-label">Size</span>
                 <strong>{selectedVsbPreset ? `${selectedVsbPreset.width} × ${selectedVsbPreset.height}` : '--'}</strong>
               </div>
               <div className="display__vsb-stat">
                 <span className="display__vsb-stat-label">Color</span>
-                <div className="display__vsb-color-readout">
-                  <span
-                    className="display__vsb-color-chip"
-                    style={{ backgroundColor: selectedVsbPreset?.color || '#ffffff' }}
-                  />
-                  <strong>{selectedVsbPreset?.color || '--'}</strong>
-                </div>
+                <strong>{selectedVsbPreset?.color || '--'}</strong>
+              </div>
+              <div className="display__vsb-stat">
+                <span className="display__vsb-stat-label">Position</span>
+                <strong>{selectedVsbPreset ? `${selectedVsbPreset.x}, ${selectedVsbPreset.y}` : '--'}</strong>
               </div>
             </div>
           </div>
@@ -857,7 +852,7 @@ const DisplayControlPage: React.FC = () => {
         </div>
         <div className="display__config-card">
           <div className="display__config-title">VSB Overlay</div>
-          <div className="display__config-value">{activeOverlayRects.length} / {DISPLAY_VSB_SLOT_COUNT}</div>
+          <div className="display__config-value">{activeOverlayRects.length} / {osdSlotLimit}</div>
         </div>
       </div>
     </div>
