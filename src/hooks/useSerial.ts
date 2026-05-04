@@ -2,6 +2,7 @@ import { useCallback, useEffect } from 'react';
 import { useRecoilState, useSetRecoilState } from 'recoil';
 import {
   ErrorFlagReadEvent,
+  FaultPinLevelEvent,
   FaultOutputStatusEvent,
   GpioCommandBytesEvent,
   GpioInputStatusEvent,
@@ -12,7 +13,10 @@ import {
   VoltMonStatusEvent,
   VoltageSample,
   isGpioStatusHeaderLine,
+  isFaultPinStatusHeaderLine,
   parseErrorFlagLine,
+  parseFaultPinStatusLine,
+  parseFaultPinStreamLine,
   parseFaultOutputLine,
   parseGpioCommandBytesLine,
   parseGpioInputLine,
@@ -24,12 +28,14 @@ import {
   parseVoltMonStatusLine,
 } from 'services/protocolParser';
 import { parseRohmProtocolLine, resetRohmProtocolState } from 'services/rohmProtocol';
+import { pushFaultPinFrame } from 'services/faultPinFrameStore';
 import { serialService } from 'services/serialService';
 import { pushFrame } from 'services/voltageFrameStore';
 import {
   availablePortsState,
   errorFlagHistoryState,
   errorFlagLatestState,
+  faultPinMonitorState,
   faultOutputPinsState,
   gpioMonitorState,
   rohmRegisterBytesState,
@@ -66,6 +72,10 @@ interface UseSerialOptions {
 }
 
 const latestVoltageValues: number[] = new Array(6).fill(Number.NaN);
+const latestFaultPinLevels: Record<'sysFault' | 'extFault', 0 | 1> = {
+  extFault: 0,
+  sysFault: 0,
+};
 
 const buildVoltageFrame = (samples: VoltageSample[], timestamp: number) => {
   if (samples.length === 0) return null;
@@ -103,6 +113,32 @@ const mapVoltMonEventToStatus = (eventType: VoltMonEvent['eventType']) => {
   }
 };
 
+const parseFaultPinFallback = (line: string): FaultPinLevelEvent[] => {
+  const sysMatch = line.match(/\bSYS_FAULT\s*=\s*(HIGH|LOW)\b/i);
+  const extMatch = line.match(/\bEXT_FAULT\s*=\s*(HIGH|LOW)\b/i);
+  const events: FaultPinLevelEvent[] = [];
+
+  if (sysMatch) {
+    events.push({
+      key: 'sysFault',
+      label: 'SYS_FAULT',
+      level: sysMatch[1].toUpperCase() as 'HIGH' | 'LOW',
+      source: line,
+    });
+  }
+
+  if (extMatch) {
+    events.push({
+      key: 'extFault',
+      label: 'EXT_FAULT',
+      level: extMatch[1].toUpperCase() as 'HIGH' | 'LOW',
+      source: line,
+    });
+  }
+
+  return events;
+};
+
 export function useSerial(options: UseSerialOptions = {}) {
   const { manageSideEffects = false } = options;
   const [connected, setConnected] = useRecoilState(serialConnectedState);
@@ -113,6 +149,7 @@ export function useSerial(options: UseSerialOptions = {}) {
   const setVoltageChannels = useSetRecoilState(voltageChannelsState);
   const setVoltMonThresholds = useSetRecoilState(voltMonThresholdsState);
   const setFaultOutputPins = useSetRecoilState(faultOutputPinsState);
+  const setFaultPinMonitor = useSetRecoilState(faultPinMonitorState);
   const setGpioMonitor = useSetRecoilState(gpioMonitorState);
   const setErrorFlagLatest = useSetRecoilState(errorFlagLatestState);
   const setErrorFlagHistory = useSetRecoilState(errorFlagHistoryState);
@@ -250,6 +287,51 @@ export function useSerial(options: UseSerialOptions = {}) {
       },
     }));
   }, [setFaultOutputPins]);
+
+  const applyFaultPinLevels = useCallback((events: FaultPinLevelEvent[], sourceType: 'status' | 'stream') => {
+    if (!events.length) return;
+
+    const now = Date.now();
+    if (process.env.NODE_ENV !== 'production') {
+      console.log('[FaultPin] parsed events', sourceType, events);
+    }
+
+    events.forEach((event) => {
+      latestFaultPinLevels[event.key] = event.level === 'HIGH' ? 1 : 0;
+    });
+
+    setFaultPinMonitor((prev) => {
+      const nextPins = { ...prev.pins };
+
+      events.forEach((event) => {
+        nextPins[event.key] = {
+          ...prev.pins[event.key],
+          label: event.label,
+          level: event.level,
+          source: event.source,
+          statusText: null,
+          updatedAt: now,
+        };
+      });
+
+      return {
+        ...prev,
+        lastStreamUpdatedAt: sourceType === 'stream' ? now : prev.lastStreamUpdatedAt,
+        lastUpdatedAt: now,
+        pins: nextPins,
+      };
+    });
+
+    if (sourceType === 'stream') {
+      pushFaultPinFrame({
+        timestamp: now,
+        values: {
+          extFault: latestFaultPinLevels.extFault,
+          sysFault: latestFaultPinLevels.sysFault,
+        },
+      });
+    }
+  }, [setFaultPinMonitor]);
 
   const applyErrorFlagRead = useCallback((event: ErrorFlagReadEvent) => {
     const snapshot = {
@@ -440,6 +522,31 @@ export function useSerial(options: UseSerialOptions = {}) {
         applyGpioCommandBytes(gpioCommandBytes);
       }
 
+      if (isFaultPinStatusHeaderLine(chunk)) {
+        setFaultPinMonitor((prev) => ({
+          ...prev,
+          lastUpdatedAt: Date.now(),
+        }));
+      }
+
+      const faultPinStatus = parseFaultPinStatusLine(chunk);
+      if (faultPinStatus) {
+        applyFaultPinLevels([faultPinStatus], 'status');
+      }
+
+      const isFaultPinChunk = /FAULT_PIN\s*:/i.test(chunk);
+      const faultPinStream = parseFaultPinStreamLine(chunk);
+      if (faultPinStream.length > 0) {
+        applyFaultPinLevels(faultPinStream, 'stream');
+      } else if (isFaultPinChunk) {
+        const fallbackEvents = parseFaultPinFallback(chunk);
+        if (fallbackEvents.length > 0) {
+          applyFaultPinLevels(fallbackEvents, 'stream');
+        } else {
+          console.warn('[FaultPin] stream line detected but no event parsed:', chunk);
+        }
+      }
+
       const simLightRead = parseSimLightReadLine(chunk);
       if (simLightRead) {
         applySimLightRead(simLightRead);
@@ -462,6 +569,7 @@ export function useSerial(options: UseSerialOptions = {}) {
     appendTerminalLine,
     applyErrorFlagRead,
     applyFaultOutputStatus,
+    applyFaultPinLevels,
     applyGpioCommandBytes,
     applyGpioInputStatus,
     applyGpioOutputStatus,
@@ -472,6 +580,7 @@ export function useSerial(options: UseSerialOptions = {}) {
     applyVoltMonEvents,
     applyVoltMonRead,
     applyVoltMonStatus,
+    setFaultPinMonitor,
     setTerminalLines,
   ]);
 

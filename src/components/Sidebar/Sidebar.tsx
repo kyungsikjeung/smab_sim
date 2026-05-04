@@ -13,7 +13,8 @@ interface NavItem {
 
 const NAV_ITEMS: NavItem[] = [
   { path: '/error-monitor',   label: '에러 모니터링',      icon: '⚑', section: 'MONITOR' },
-  { path: '/fault-log-monitor', label: '최근 에러 5건',   icon: '▤' },
+  { path: '/fault-log-monitor', label: '최근 에러 10건',  icon: '▤' },
+  { path: '/fault-pin-monitor', label: 'Fault Pin 모니터링', icon: '⎍' },
   { path: '/gpio-monitor',    label: 'GPIO 모니터링',     icon: '⎇' },
   { path: '/register',        label: '레지스터 모니터링', icon: '⎍' },
   { path: '/voltage-monitor', label: '전압 모니터링',     icon: '⚡' },

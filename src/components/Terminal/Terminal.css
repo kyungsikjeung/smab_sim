@@ -221,13 +221,18 @@
 }
 
 .terminal__line-dir--rx     { color: var(--color-success); background: var(--color-success-bg); }
-.terminal__line-dir--tx     { color: var(--blue-400);      background: var(--color-info-bg); }
+.terminal__line-dir--tx     { color: #f472b6; background: rgba(244, 114, 182, 0.18); }
 .terminal__line-dir--system { color: var(--color-warning); background: var(--color-warning-bg); }
 
 .terminal__line-content {
   flex: 1;
   word-break: break-all;
   color: var(--text-primary);
+}
+
+.terminal__line--tx .terminal__line-content {
+  color: #f9a8d4;
+  font-weight: 600;
 }
 
 .terminal__search-hit {

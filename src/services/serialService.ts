@@ -21,6 +21,7 @@ class SerialService {
   private mockDisconnectedListeners: Set<() => void>;
   private mockErrorListeners: Set<(error: string) => void>;
   private mockFaultOutputLevels: { extFault: MockFaultLevel; sysFault: MockFaultLevel };
+  private mockFaultPinStreamEnabled: boolean;
   private mockGpioInputs: { gmslTpDesLock: MockFaultLevel; lcdFail: MockFaultLevel; ledFail: MockFaultLevel };
   private mockConnected: boolean;
   private mockErrorFlags: number;
@@ -43,6 +44,7 @@ class SerialService {
       extFault: 'HIGH',
       sysFault: 'LOW',
     };
+    this.mockFaultPinStreamEnabled = false;
     this.mockGpioInputs = {
       gmslTpDesLock: 'HIGH',
       lcdFail: 'LOW',
@@ -108,6 +110,20 @@ class SerialService {
       if (Math.random() > 0.84) {
         this.mockErrorFlags ^= (1 << Math.floor(Math.random() * 6)) >>> 0;
         this.emitMockData(`[error] flags=${this.toNormalizedHex(this.mockErrorFlags)}`);
+      }
+
+      if (this.mockFaultPinStreamEnabled) {
+        if (Math.random() > 0.72) {
+          this.mockFaultOutputLevels.sysFault = this.mockFaultOutputLevels.sysFault === 'HIGH' ? 'LOW' : 'HIGH';
+        }
+
+        if (Math.random() > 0.8) {
+          this.mockFaultOutputLevels.extFault = this.mockFaultOutputLevels.extFault === 'HIGH' ? 'LOW' : 'HIGH';
+        }
+
+        this.emitMockData(
+          `FAULT_PIN: SYS_FAULT=${this.mockFaultOutputLevels.sysFault} EXT_FAULT=${this.mockFaultOutputLevels.extFault}`
+        );
       }
     }, 2000);
   }
@@ -293,6 +309,45 @@ class SerialService {
     return true;
   }
 
+  private handleMockFaultPinStatus(command: string): boolean {
+    if (!/^fault_pin_status\b/i.test(command)) return false;
+
+    window.setTimeout(() => {
+      this.emitMockDataLines([
+        '=== Fault Pin Status ===',
+        `SYS_FAULT: ${this.mockFaultOutputLevels.sysFault}`,
+        `EXT_FAULT: ${this.mockFaultOutputLevels.extFault}`,
+      ]);
+    }, 30);
+
+    return true;
+  }
+
+  private handleMockFaultPinStream(command: string): boolean {
+    if (/^fault_pin_stream\s+start\b/i.test(command)) {
+      this.mockFaultPinStreamEnabled = true;
+
+      window.setTimeout(() => {
+        this.emitMockData('FAULT_PIN_STREAM: START OK');
+        this.emitMockData(
+          `FAULT_PIN: SYS_FAULT=${this.mockFaultOutputLevels.sysFault} EXT_FAULT=${this.mockFaultOutputLevels.extFault}`
+        );
+      }, 30);
+      return true;
+    }
+
+    if (/^fault_pin_stream\s+stop\b/i.test(command)) {
+      this.mockFaultPinStreamEnabled = false;
+
+      window.setTimeout(() => {
+        this.emitMockData('FAULT_PIN_STREAM: STOP OK');
+      }, 30);
+      return true;
+    }
+
+    return false;
+  }
+
   private handleMockErrorRead(command: string): boolean {
     const match = command.match(/^(error|err|faultinj)\s+read\b/i);
     if (!match) return false;
@@ -332,10 +387,10 @@ class SerialService {
       this.emitMockDataLines([
         '[I][flash_mgr] Read fault ptr raw 0xFFE198 -> use 0xFFE198',
         '[I][flash_mgr] Recovered next fault ptr from checkpoint 0xFFE198 -> 0xFFE5F8',
-        '=== Fault Log Recent (5 max) ===',
+        '=== Fault Log Recent (10 max) ===',
         '[I][flash_mgr] Read fault ptr raw 0xFFE198 -> use 0xFFE198',
         '[I][flash_mgr] Recovered next fault ptr from checkpoint 0xFFE198 -> 0xFFE5F8',
-        'Entry: 1/5 (recent_idx=0, newest)',
+        'Entry: 1/10 (recent_idx=0, newest)',
         'Addr: 0xFFE5F0',
         'Uptime: 0:1:26.58',
         'Flags: 0x20000',
@@ -343,7 +398,7 @@ class SerialService {
         '- bit17 NM_IMG_CRC',
         '[I][flash_mgr] Read fault ptr raw 0xFFE198 -> use 0xFFE198',
         '[I][flash_mgr] Recovered next fault ptr from checkpoint 0xFFE198 -> 0xFFE5F8',
-        'Entry: 2/5 (recent_idx=1)',
+        'Entry: 2/10 (recent_idx=1)',
         'Addr: 0xFFE5E8',
         'Uptime: 0:0:0.3',
         'Flags: 0x8000',
@@ -351,7 +406,7 @@ class SerialService {
         '- bit15 WDG_FAIL',
         '[I][flash_mgr] Read fault ptr raw 0xFFE198 -> use 0xFFE198',
         '[I][flash_mgr] Recovered next fault ptr from checkpoint 0xFFE198 -> 0xFFE5F8',
-        'Entry: 3/5 (recent_idx=2)',
+        'Entry: 3/10 (recent_idx=2)',
         'Addr: 0xFFE5E0',
         'Uptime: 0:13:28.3',
         'Flags: 0x8000',
@@ -359,7 +414,7 @@ class SerialService {
         '- bit15 WDG_FAIL',
         '[I][flash_mgr] Read fault ptr raw 0xFFE198 -> use 0xFFE198',
         '[I][flash_mgr] Recovered next fault ptr from checkpoint 0xFFE198 -> 0xFFE5F8',
-        'Entry: 4/5 (recent_idx=3)',
+        'Entry: 4/10 (recent_idx=3)',
         'Addr: 0xFFE5D8',
         'Uptime: 0:13:6.88',
         'Flags: 0x10000',
@@ -367,9 +422,49 @@ class SerialService {
         '- bit16 LVDS_VID_FREEZE',
         '[I][flash_mgr] Read fault ptr raw 0xFFE198 -> use 0xFFE198',
         '[I][flash_mgr] Recovered next fault ptr from checkpoint 0xFFE198 -> 0xFFE5F8',
-        'Entry: 5/5 (recent_idx=4)',
+        'Entry: 5/10 (recent_idx=4)',
         'Addr: 0xFFE5D0',
         'Uptime: 0:13:2.78',
+        'Flags: 0x10000',
+        'Bits:',
+        '- bit16 LVDS_VID_FREEZE',
+        '[I][flash_mgr] Read fault ptr raw 0xFFE198 -> use 0xFFE198',
+        '[I][flash_mgr] Recovered next fault ptr from checkpoint 0xFFE198 -> 0xFFE5F8',
+        'Entry: 6/10 (recent_idx=5)',
+        'Addr: 0xFFE5C8',
+        'Uptime: 0:12:55.10',
+        'Flags: 0x8',
+        'Bits:',
+        '- bit3 CH2_UVP',
+        '[I][flash_mgr] Read fault ptr raw 0xFFE198 -> use 0xFFE198',
+        '[I][flash_mgr] Recovered next fault ptr from checkpoint 0xFFE198 -> 0xFFE5F8',
+        'Entry: 7/10 (recent_idx=6)',
+        'Addr: 0xFFE5C0',
+        'Uptime: 0:12:41.44',
+        'Flags: 0x8',
+        'Bits:',
+        '- bit3 CH2_UVP',
+        '[I][flash_mgr] Read fault ptr raw 0xFFE198 -> use 0xFFE198',
+        '[I][flash_mgr] Recovered next fault ptr from checkpoint 0xFFE198 -> 0xFFE5F8',
+        'Entry: 8/10 (recent_idx=7)',
+        'Addr: 0xFFE5B8',
+        'Uptime: 0:12:38.09',
+        'Flags: 0x1',
+        'Bits:',
+        '- bit0 CH1_OVP',
+        '[I][flash_mgr] Read fault ptr raw 0xFFE198 -> use 0xFFE198',
+        '[I][flash_mgr] Recovered next fault ptr from checkpoint 0xFFE198 -> 0xFFE5F8',
+        'Entry: 9/10 (recent_idx=8)',
+        'Addr: 0xFFE5B0',
+        'Uptime: 0:12:22.51',
+        'Flags: 0x20000',
+        'Bits:',
+        '- bit17 NM_IMG_CRC',
+        '[I][flash_mgr] Read fault ptr raw 0xFFE198 -> use 0xFFE198',
+        '[I][flash_mgr] Recovered next fault ptr from checkpoint 0xFFE198 -> 0xFFE5F8',
+        'Entry: 10/10 (recent_idx=9)',
+        'Addr: 0xFFE5D0',
+        'Uptime: 0:11:58.33',
         'Flags: 0x10000',
         'Bits:',
         '- bit16 LVDS_VID_FREEZE',
@@ -463,6 +558,7 @@ class SerialService {
     }
 
     this.mockConnected = false;
+    this.mockFaultPinStreamEnabled = false;
     this.mockPort = null;
     return { success: true };
   }
@@ -486,6 +582,8 @@ class SerialService {
       || this.handleMockRohmFwChecksumInject(normalizedCommand)
       || this.handleMockSoftwareReset(normalizedCommand)
       || this.handleMockGpioStatus(normalizedCommand)
+      || this.handleMockFaultPinStatus(normalizedCommand)
+      || this.handleMockFaultPinStream(normalizedCommand)
       || this.handleMockErrorRead(normalizedCommand)
       || this.handleMockSimLightRead(normalizedCommand)
       || this.handleMockLightsWrite(normalizedCommand)

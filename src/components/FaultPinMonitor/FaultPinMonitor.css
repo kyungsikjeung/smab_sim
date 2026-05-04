@@ -1,0 +1,274 @@
+.fault-pin-monitor {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-height: 100%;
+}
+
+.fault-pin-monitor__hero {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.fault-pin-monitor__hero-copy,
+.fault-pin-monitor__action-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.fault-pin-monitor__eyebrow,
+.fault-pin-monitor__chart-note,
+.fault-pin-monitor__pin-time {
+  color: var(--text-tertiary);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.fault-pin-monitor__title {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 28px;
+  line-height: 1.25;
+}
+
+.fault-pin-monitor__description,
+.fault-pin-monitor__pin-source,
+.fault-pin-monitor__action-btn small {
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.fault-pin-monitor__hero-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--border-default);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.fault-pin-monitor__hero-status--connected {
+  color: #86efac;
+  background: rgba(34, 197, 94, 0.12);
+}
+
+.fault-pin-monitor__hero-status--disconnected {
+  color: var(--text-secondary);
+  background: rgba(148, 163, 184, 0.08);
+}
+
+.fault-pin-monitor__hero-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: currentColor;
+}
+
+.fault-pin-monitor__top-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(320px, 0.9fr);
+  gap: 16px;
+  align-items: stretch;
+}
+
+.fault-pin-monitor__pin-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.fault-pin-monitor__pin-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  border: 1px solid rgba(148, 163, 184, 0.12);
+}
+
+.fault-pin-monitor__pin-card--high {
+  background: linear-gradient(180deg, rgba(34, 197, 94, 0.12), rgba(15, 23, 42, 0.96));
+}
+
+.fault-pin-monitor__pin-card--low {
+  background: linear-gradient(180deg, rgba(249, 115, 22, 0.14), rgba(15, 23, 42, 0.96));
+}
+
+.fault-pin-monitor__pin-card--unknown {
+  background: linear-gradient(180deg, rgba(71, 85, 105, 0.16), rgba(15, 23, 42, 0.96));
+}
+
+.fault-pin-monitor__pin-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.fault-pin-monitor__pin-label {
+  color: var(--text-primary);
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.fault-pin-monitor__pin-state {
+  color: var(--text-primary);
+  font-size: 28px;
+  font-weight: 700;
+  line-height: 1.1;
+}
+
+.fault-pin-monitor__action-card {
+  justify-content: flex-start;
+}
+
+.fault-pin-monitor__action-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.fault-pin-monitor__action-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid rgba(148, 163, 184, 0.12);
+  background: rgba(8, 14, 28, 0.88);
+  color: var(--text-primary);
+  text-align: left;
+  cursor: pointer;
+  transition: transform var(--transition-fast), border-color var(--transition-fast), background var(--transition-fast);
+}
+
+.fault-pin-monitor__action-btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+  border-color: rgba(249, 115, 22, 0.34);
+  background: rgba(18, 26, 48, 0.96);
+}
+
+.fault-pin-monitor__action-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.fault-pin-monitor__action-btn span {
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.fault-pin-monitor__action-btn small {
+  font-size: 11px;
+}
+
+.fault-pin-monitor__action-btn--active {
+  border-color: rgba(249, 115, 22, 0.4);
+  background: linear-gradient(180deg, rgba(249, 115, 22, 0.18), rgba(8, 14, 28, 0.92));
+}
+
+.fault-pin-monitor__action-btn--danger {
+  border-color: rgba(239, 68, 68, 0.18);
+}
+
+.fault-pin-monitor__action-btn--danger:hover:not(:disabled) {
+  border-color: rgba(239, 68, 68, 0.38);
+}
+
+.fault-pin-monitor__chart-card {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-height: 360px;
+}
+
+.fault-pin-monitor__legend {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.fault-pin-monitor__legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.fault-pin-monitor__legend-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+}
+
+.fault-pin-monitor__chart-wrap {
+  flex: 1;
+  min-height: 320px;
+  border-radius: var(--radius-md);
+  background: rgba(2, 6, 23, 0.52);
+  border: 1px solid rgba(148, 163, 184, 0.08);
+  overflow: hidden;
+}
+
+.fault-pin-monitor__chart-stage {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-height: 320px;
+}
+
+.fault-pin-monitor__chart-svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.fault-pin-monitor__chart-empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-tertiary);
+  font-size: 13px;
+}
+
+@media (max-width: 1080px) {
+  .fault-pin-monitor__top-grid,
+  .fault-pin-monitor__pin-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 760px) {
+  .fault-pin-monitor__hero,
+  .fault-pin-monitor__pin-top {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .fault-pin-monitor__hero-status {
+    width: 100%;
+  }
+
+  .fault-pin-monitor__pin-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .fault-pin-monitor__action-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .fault-pin-monitor__title {
+    font-size: 24px;
+  }
+}

@@ -1,4 +1,4 @@
-import { GpioInputKey, GpioOutputKey } from 'types';
+import { FaultPinKey, GpioInputKey, GpioOutputKey } from 'types';
 
 export interface VoltageSample {
   channelId: number;
@@ -64,6 +64,13 @@ export interface GpioCommandBytesEvent {
   source: string;
 }
 
+export interface FaultPinLevelEvent {
+  key: FaultPinKey;
+  label: string;
+  level: 'HIGH' | 'LOW';
+  source: string;
+}
+
 export interface SimLightReadEvent {
   bytes: [number, number, number, number];
   mask: number;
@@ -88,6 +95,11 @@ const GPIO_INPUT_KEY_MAP: Record<string, GpioInputKey> = {
   'GMSL(TP_DES_LOCK)': 'gmslTpDesLock',
   LCD_FAIL: 'lcdFail',
   LED_FAIL: 'ledFail',
+};
+
+const FAULT_PIN_KEY_MAP: Record<string, FaultPinKey> = {
+  EXT_FAULT: 'extFault',
+  SYS_FAULT: 'sysFault',
 };
 
 const stripPromptPrefix = (line: string): string => line
@@ -555,6 +567,53 @@ export const parseGpioCommandBytesLine = (line: string): GpioCommandBytesEvent |
     commandId: match[1].toUpperCase(),
     source: trimmed,
   };
+};
+
+export const isFaultPinStatusHeaderLine = (line: string): boolean => {
+  return /===\s*Fault Pin Status\s*===/i.test(stripPromptPrefix(line));
+};
+
+export const parseFaultPinStatusLine = (line: string): FaultPinLevelEvent | null => {
+  const trimmed = stripPromptPrefix(line);
+  const match = trimmed.match(/^(SYS_FAULT|EXT_FAULT)\s*:\s*(HIGH|LOW)\s*$/i);
+  if (!match) return null;
+
+  const label = normalizeGpioLabel(match[1]);
+  const key = FAULT_PIN_KEY_MAP[label];
+  if (!key) return null;
+
+  return {
+    key,
+    label,
+    level: match[2].toUpperCase() as 'HIGH' | 'LOW',
+    source: trimmed,
+  };
+};
+
+export const parseFaultPinStreamLine = (line: string): FaultPinLevelEvent[] => {
+  const trimmed = stripPromptPrefix(line);
+  const prefixMatch = trimmed.match(/^FAULT_PIN\s*:\s*(.+)$/i);
+  if (!prefixMatch) return [];
+
+  const payload = prefixMatch[1].replace(/[;,]/g, ' ');
+  const pattern = /\b(SYS_FAULT|EXT_FAULT)\b\s*=\s*\b(HIGH|LOW)\b/gi;
+  const events: FaultPinLevelEvent[] = [];
+  let match: RegExpExecArray | null;
+
+  while ((match = pattern.exec(payload)) !== null) {
+    const label = normalizeGpioLabel(match[1]);
+    const key = FAULT_PIN_KEY_MAP[label];
+    if (!key) continue;
+
+    events.push({
+      key,
+      label,
+      level: match[2].toUpperCase() as 'HIGH' | 'LOW',
+      source: trimmed,
+    });
+  }
+
+  return events;
 };
 
 export const parseSimLightReadLine = (line: string): SimLightReadEvent | null => {

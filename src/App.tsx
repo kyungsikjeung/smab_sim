@@ -6,6 +6,7 @@ import TerminalPage from 'components/Terminal/TerminalPage';
 import CommandPage from 'components/Command/CommandPage';
 import FaultInjectionPage from 'components/FaultInjection/FaultInjectionPage';
 import FaultLogMonitorPage from 'components/FaultLog/FaultLogMonitorPage';
+import FaultPinMonitorPage from 'components/FaultPinMonitor/FaultPinMonitorPage';
 import GpioMonitorPage from 'components/GpioMonitor/GpioMonitorPage';
 import RegisterEditorPage from 'components/Register/RegisterEditorPage';
 import ErrorMonitorPage from 'components/ErrorMonitor/ErrorMonitorPage';
@@ -92,6 +93,7 @@ const App: React.FC = () => {
             <Route path="commands" element={<CommandPage />} />
             <Route path="fault-injection" element={<FaultInjectionPage />} />
             <Route path="fault-log-monitor" element={<FaultLogMonitorPage />} />
+            <Route path="fault-pin-monitor" element={<FaultPinMonitorPage />} />
             <Route path="error-monitor" element={<ErrorMonitorPage />} />
             <Route path="gpio-monitor" element={<GpioMonitorPage />} />
             <Route path="register" element={<RegisterEditorPage />} />

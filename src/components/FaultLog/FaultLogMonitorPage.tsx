@@ -166,14 +166,14 @@ const FaultLogMonitorPage: React.FC = () => {
 
     if (isMonitoring) {
       setIsMonitoring(false);
-      setToast({ type: 'info', message: '최근 에러 5건 모니터링을 중지했습니다.' });
+      setToast({ type: 'info', message: '최근 에러 10건 모니터링을 중지했습니다.' });
       return;
     }
 
     setIsMonitoring(true);
     setToast({
       type: 'success',
-      message: `최근 에러 5건 모니터링을 시작했습니다. (${AUTO_MONITOR_INTERVAL_MS / 1000}초 간격)`,
+      message: `최근 에러 10건 모니터링을 시작했습니다. (${AUTO_MONITOR_INTERVAL_MS / 1000}초 간격)`,
     });
     void handleReadLatest();
   }, [connected, handleReadLatest, isMonitoring, setToast]);
@@ -278,7 +278,7 @@ const FaultLogMonitorPage: React.FC = () => {
         <div className="fault-log-monitor__hero-top">
           <div className="fault-log-monitor__hero-copy">
             <div className="fault-log-monitor__eyebrow">Recent Fault Log</div>
-            <h1 className="fault-log-monitor__title">최근 에러 5건 모니터링</h1>
+            <h1 className="fault-log-monitor__title">최근 에러 10건 모니터링</h1>
             <p className="fault-log-monitor__description">
               <code>{FAULT_LOG_COMMAND}</code> 응답을 최근 기록 테이블로 정리합니다.
             </p>
@@ -297,7 +297,7 @@ const FaultLogMonitorPage: React.FC = () => {
 
           <div className="fault-log-monitor__toolbar-actions">
             <button className="btn btn--primary" type="button" onClick={handleReadLatest} disabled={!connected || loading}>
-              최근 5건 조회
+              최근 10건 조회
             </button>
             <button className="btn btn--secondary" type="button" onClick={handleMonitorToggle} disabled={!connected}>
               {isMonitoring ? '모니터링 중지' : '모니터링 시작'}
@@ -350,7 +350,7 @@ const FaultLogMonitorPage: React.FC = () => {
         <section className="card fault-log-monitor__empty-state">
           <div className="fault-log-monitor__empty-title">에러 로그 기록이 없습니다.</div>
           <div className="fault-log-monitor__empty-text">
-            상단 <strong>최근 5건 조회</strong> 또는 <strong>모니터링 시작</strong>으로 `flog latest` 응답을 가져오세요.
+            상단 <strong>최근 10건 조회</strong> 또는 <strong>모니터링 시작</strong>으로 `flog latest` 응답을 가져오세요.
           </div>
         </section>
       ) : (
@@ -358,7 +358,7 @@ const FaultLogMonitorPage: React.FC = () => {
           <section className="card fault-log-monitor__table-card">
             <div className="card__header">
               <div>
-                <div className="card__title">최근 에러 5건 로그 기록</div>
+                <div className="card__title">최근 에러 10건 로그 기록</div>
                 <div className="fault-log-monitor__section-note">최신 순서대로 주소, uptime, flags, bit 정보를 비교합니다.</div>
               </div>
               <div className="fault-log-monitor__table-summary">
@@ -403,64 +403,6 @@ const FaultLogMonitorPage: React.FC = () => {
               </div>
             )}
           </section>
-
-          <div className="fault-log-monitor__side-stack">
-            <section className="card fault-log-monitor__focus-card">
-              <div className="card__header">
-                <div>
-                  <div className="card__title">최신 기록</div>
-                  <div className="fault-log-monitor__section-note">가장 최근에 저장된 fault log entry입니다.</div>
-                </div>
-              </div>
-
-              {latestEntry ? (
-                <div className="fault-log-monitor__focus-body">
-                  <div className="fault-log-monitor__focus-row">
-                    <span>Addr</span>
-                    <code>{latestEntry.address}</code>
-                  </div>
-                  <div className="fault-log-monitor__focus-row">
-                    <span>Uptime</span>
-                    <code>{latestEntry.uptime}</code>
-                  </div>
-                  <div className="fault-log-monitor__focus-row">
-                    <span>Flags</span>
-                    <code>{latestEntry.flagsHex}</code>
-                  </div>
-                  <div className="fault-log-monitor__focus-bits">
-                    {renderBits(latestEntry)}
-                  </div>
-                </div>
-              ) : (
-                <div className="fault-log-monitor__empty-table">최신 기록이 없습니다.</div>
-              )}
-            </section>
-
-            <section className="card fault-log-monitor__summary-card">
-              <div className="card__header">
-                <div>
-                  <div className="card__title">반복 에러 비트</div>
-                  <div className="fault-log-monitor__section-note">최근 5건에서 자주 나온 bit를 먼저 보여줍니다.</div>
-                </div>
-              </div>
-
-              {recurringBits.length === 0 ? (
-                <div className="fault-log-monitor__empty-table">bit 정보가 없습니다.</div>
-              ) : (
-                <div className="fault-log-monitor__summary-list">
-                  {recurringBits.map((bit) => (
-                    <div key={`${bit.bit}-${bit.label}`} className="fault-log-monitor__summary-item">
-                      <div className="fault-log-monitor__summary-top">
-                        <span className="fault-log-monitor__summary-bit">bit{bit.bit}</span>
-                        <span className="fault-log-monitor__summary-count">{bit.count}회</span>
-                      </div>
-                      <div className="fault-log-monitor__summary-label">{bit.label}</div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </section>
-          </div>
         </div>
       )}
     </div>

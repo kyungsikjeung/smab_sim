@@ -314,6 +314,7 @@ export interface FaultOutputPinSnapshot {
 export type GpioSignalLevel = 'HIGH' | 'LOW' | 'UNKNOWN';
 export type GpioOutputKey = 'sysFault' | 'extFault';
 export type GpioInputKey = 'gmslTpDesLock' | 'lcdFail' | 'ledFail';
+export type FaultPinKey = 'sysFault' | 'extFault';
 
 export interface GpioPinSnapshot {
   label: string;
@@ -336,6 +337,20 @@ export interface GpioMonitorSnapshot {
   lastHeaderSeenAt: number | null;
   lastUpdatedAt: number | null;
   outputs: Record<GpioOutputKey, GpioPinSnapshot>;
+}
+
+export interface FaultPinSnapshot {
+  lastStreamUpdatedAt: number | null;
+  lastUpdatedAt: number | null;
+  pins: Record<FaultPinKey, GpioPinSnapshot>;
+}
+
+export interface FaultPinFrame {
+  timestamp: number;
+  values: {
+    extFault: 0 | 1;
+    sysFault: 0 | 1;
+  };
 }
 
 /** ─── Error Monitor Types ─── */
@@ -403,6 +418,7 @@ export type PageRoute =
   | '/commands'
   | '/fault-injection'
   | '/fault-log-monitor'
+  | '/fault-pin-monitor'
   | '/error-monitor'
   | '/gpio-monitor'
   | '/register'

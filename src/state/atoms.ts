@@ -12,6 +12,7 @@ import {
   VoltMonThresholdChannel,
   FaultOutputPinSnapshot,
   GpioMonitorSnapshot,
+  FaultPinSnapshot,
   DisplayOverlayRect,
 } from 'types';
 import { createDefaultTestSequences, DEFAULT_TEST_SEQUENCE_ID } from 'data/testAutomationPresets';
@@ -235,6 +236,18 @@ export const gpioMonitorState = atom<GpioMonitorSnapshot>({
     lastHeaderSeenAt: null,
     lastUpdatedAt: null,
     outputs: {
+      extFault: createDefaultGpioPin('EXT_FAULT'),
+      sysFault: createDefaultGpioPin('SYS_FAULT'),
+    },
+  },
+});
+
+export const faultPinMonitorState = atom<FaultPinSnapshot>({
+  key: 'faultPinMonitor',
+  default: {
+    lastStreamUpdatedAt: null,
+    lastUpdatedAt: null,
+    pins: {
       extFault: createDefaultGpioPin('EXT_FAULT'),
       sysFault: createDefaultGpioPin('SYS_FAULT'),
     },

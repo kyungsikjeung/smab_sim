@@ -10,6 +10,7 @@ const PAGE_TITLES: Record<string, string> = {
   '/commands':        'CMD 명령어',
   '/fault-injection': 'Fault Injection',
   '/error-monitor':   '에러 모니터링',
+  '/fault-pin-monitor': 'Fault Pin 모니터링',
   '/gpio-monitor':    'GPIO 모니터링',
   '/register':        '레지스터 모니터링',
   '/voltage-monitor': '전압 모니터링',
