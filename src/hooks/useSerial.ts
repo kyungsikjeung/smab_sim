@@ -1,30 +1,63 @@
 import { useCallback, useEffect } from 'react';
 import { useRecoilState, useSetRecoilState } from 'recoil';
-import { serialService } from 'services/serialService';
-import { parseRohmProtocolLine, resetRohmProtocolState } from 'services/rohmProtocol';
-import { pushFrame } from 'services/voltageFrameStore';
-import { parseVoltageLine, parseVoltageEvents, VoltageSample, VoltMonEvent } from 'services/protocolParser';
 import {
+  ErrorFlagReadEvent,
+  FaultOutputStatusEvent,
+  GpioCommandBytesEvent,
+  GpioInputStatusEvent,
+  GpioOutputStatusEvent,
+  SimLightReadEvent,
+  VoltMonEvent,
+  VoltMonReadEvent,
+  VoltMonStatusEvent,
+  VoltageSample,
+  isGpioStatusHeaderLine,
+  parseErrorFlagLine,
+  parseFaultOutputLine,
+  parseGpioCommandBytesLine,
+  parseGpioInputLine,
+  parseGpioOutputLine,
+  parseSimLightReadLine,
+  parseVoltageEvents,
+  parseVoltageLine,
+  parseVoltMonReadLine,
+  parseVoltMonStatusLine,
+} from 'services/protocolParser';
+import { parseRohmProtocolLine, resetRohmProtocolState } from 'services/rohmProtocol';
+import { serialService } from 'services/serialService';
+import { pushFrame } from 'services/voltageFrameStore';
+import {
+  availablePortsState,
+  errorFlagHistoryState,
+  errorFlagLatestState,
+  faultOutputPinsState,
+  gpioMonitorState,
+  rohmRegisterBytesState,
+  serialBaudRateState,
   serialConnectedState,
   serialPortPathState,
-  serialBaudRateState,
-  availablePortsState,
-  rohmRegisterBytesState,
   terminalLinesState,
-  voltageChannelsState,
   toastMessageState,
+  voltageChannelsState,
+  voltMonThresholdsState,
+  warningLightsState,
 } from 'state/atoms';
 import { SerialResult, TerminalLine } from 'types';
+import { formatTimeWithMilliseconds } from 'utils/dateTime';
 
-/** 고유 ID 생성 유틸 */
+const MAX_TERMINAL_LINES = 1000;
+const MAX_ERROR_HISTORY = 50;
+
 let lineIdCounter = 0;
+let serialRxLineSeq = 0;
+
 const generateId = () => `line-${Date.now()}-${++lineIdCounter}`;
-const getTimestamp = () => new Date().toLocaleTimeString('ko-KR', { hour12: false, fractionalSecondDigits: 3 });
+const getTimestamp = () => formatTimeWithMilliseconds();
+const rawVoltMonToVoltage = (rawValue: number) => parseFloat((rawValue / 10000).toFixed(4));
 
 const ansiToClearScreen = /\x1b\[[0-?]*[ -/]*[@-~]/g;
 const ansiClearScreenCommand = /\x1b\[[0-9;]*J/;
 const isIgnorableVoltMonControl = (line: string): boolean => /VoltMon\s+log\s*:\s*(on|off)/i.test(line);
-let serialRxLineSeq = 0;
 
 const sanitizeSerialLine = (input: string): string => input.replace(ansiToClearScreen, '').trim();
 
@@ -53,6 +86,23 @@ const buildVoltageFrame = (samples: VoltageSample[], timestamp: number) => {
   };
 };
 
+const normalizeFaultOutputLevel = (level: 'HIGH' | 'LOW') => (level === 'HIGH' ? 'H' : 'L') as 'H' | 'L';
+
+const mapVoltMonEventToStatus = (eventType: VoltMonEvent['eventType']) => {
+  switch (eventType) {
+    case 'OnUnderSet':
+      return { state: 1, statusText: 'UNDER' };
+    case 'OnOverSet':
+      return { state: 2, statusText: 'OVER' };
+    case 'OnClear':
+    case 'OnClearFromOver':
+    case 'OnClearFromUnder':
+      return { state: 0, statusText: 'OK' };
+    default:
+      return { state: null, statusText: 'UNKNOWN' };
+  }
+};
+
 export function useSerial(options: UseSerialOptions = {}) {
   const { manageSideEffects = false } = options;
   const [connected, setConnected] = useRecoilState(serialConnectedState);
@@ -61,29 +111,47 @@ export function useSerial(options: UseSerialOptions = {}) {
   const [ports, setPorts] = useRecoilState(availablePortsState);
   const setTerminalLines = useSetRecoilState(terminalLinesState);
   const setVoltageChannels = useSetRecoilState(voltageChannelsState);
+  const setVoltMonThresholds = useSetRecoilState(voltMonThresholdsState);
+  const setFaultOutputPins = useSetRecoilState(faultOutputPinsState);
+  const setGpioMonitor = useSetRecoilState(gpioMonitorState);
+  const setErrorFlagLatest = useSetRecoilState(errorFlagLatestState);
+  const setErrorFlagHistory = useSetRecoilState(errorFlagHistoryState);
   const setToast = useSetRecoilState(toastMessageState);
   const setRohmRegisterBytes = useSetRecoilState(rohmRegisterBytesState);
+  const setWarningLights = useSetRecoilState(warningLightsState);
+
+  const appendTerminalLine = useCallback((line: TerminalLine) => {
+    setTerminalLines((prev) => [...prev.slice(-(MAX_TERMINAL_LINES - 1)), line]);
+  }, [setTerminalLines]);
 
   const applyVoltageSamples = useCallback((samples: VoltageSample[]) => {
     if (!samples.length) return;
+
     const now = Date.now();
     const frame = buildVoltageFrame(samples, now);
 
     setVoltageChannels((prev) =>
-      prev.map((ch) => {
-        const sample = samples.find((entry) => entry.channelId === ch.id);
-        if (!sample) return ch;
-
-        const nextValue = parseFloat(sample.voltage.toFixed(3));
-        if (process.env.NODE_ENV !== 'production') {
-          console.log(
-            `[Voltage RX] CH${sample.channelId}: raw ${sample.rawValue} -> ${sample.voltage.toFixed(3)}V`
-          );
-        }
+      prev.map((channel) => {
+        const sample = samples.find((entry) => entry.channelId === channel.id);
+        if (!sample) return channel;
 
         return {
-          ...ch,
-          currentValue: nextValue,
+          ...channel,
+          currentValue: parseFloat(sample.voltage.toFixed(3)),
+        };
+      })
+    );
+
+    setVoltMonThresholds((prev) =>
+      prev.map((channel) => {
+        const sample = samples.find((entry) => entry.channelId === channel.channelId);
+        if (!sample) return channel;
+
+        return {
+          ...channel,
+          currentVoltage: parseFloat(sample.voltage.toFixed(4)),
+          rawAdc: sample.rawValue,
+          updatedAt: now,
         };
       })
     );
@@ -91,19 +159,194 @@ export function useSerial(options: UseSerialOptions = {}) {
     if (frame) {
       pushFrame(frame);
     }
-  }, [setVoltageChannels]);
+  }, [setVoltageChannels, setVoltMonThresholds]);
 
-  const logVoltageEvents = useCallback((events: VoltMonEvent[]) => {
+  const applyVoltMonEvents = useCallback((events: VoltMonEvent[]) => {
     if (!events.length) return;
 
-    events.forEach((event) => {
-      if (process.env.NODE_ENV !== 'production') {
-        console.log(
-          `[VoltMon Event] CH${event.channelId}: ${event.eventType} (source: ${event.source})`
-        );
-      }
-    });
-  }, []);
+    const now = Date.now();
+    setVoltMonThresholds((prev) =>
+      prev.map((channel) => {
+        const matched = events.find((event) => event.channelId === channel.channelId);
+        if (!matched) return channel;
+
+        const nextStatus = mapVoltMonEventToStatus(matched.eventType);
+        return {
+          ...channel,
+          state: nextStatus.state,
+          statusText: nextStatus.statusText,
+          updatedAt: now,
+        };
+      })
+    );
+  }, [setVoltMonThresholds]);
+
+  const applyVoltMonRead = useCallback((event: VoltMonReadEvent) => {
+    const now = Date.now();
+    const lowVoltage = rawVoltMonToVoltage(event.lowRaw);
+    const highVoltage = rawVoltMonToVoltage(event.highRaw);
+
+    setVoltMonThresholds((prev) =>
+      prev.map((channel) => {
+        if (channel.channelId !== event.channelId) return channel;
+
+        return {
+          ...channel,
+          commandIndex: event.commandIndex,
+          currentVoltage: event.currentVoltage,
+          highRaw: event.highRaw,
+          highVoltage,
+          lowRaw: event.lowRaw,
+          lowVoltage,
+          rawAdc: event.rawAdc,
+          state: event.state,
+          statusText: event.statusText,
+          updatedAt: now,
+        };
+      })
+    );
+
+    const currentVoltage = event.currentVoltage;
+    if (currentVoltage !== null) {
+      setVoltageChannels((prev) =>
+        prev.map((channel) => (
+          channel.id === event.channelId
+            ? {
+                ...channel,
+                currentValue: parseFloat(currentVoltage.toFixed(3)),
+              }
+            : channel
+        ))
+      );
+    }
+  }, [setVoltMonThresholds, setVoltageChannels]);
+
+  const applyVoltMonStatus = useCallback((event: VoltMonStatusEvent) => {
+    const now = Date.now();
+
+    setVoltMonThresholds((prev) =>
+      prev.map((channel) => {
+        if (channel.channelId !== event.channelId) return channel;
+
+        return {
+          ...channel,
+          state: event.state,
+          statusText: event.statusText,
+          updatedAt: now,
+        };
+      })
+    );
+  }, [setVoltMonThresholds]);
+
+  const applyFaultOutputStatus = useCallback((event: FaultOutputStatusEvent) => {
+    const now = Date.now();
+
+    setFaultOutputPins((prev) => ({
+      ...prev,
+      [event.key]: {
+        level: event.level,
+        source: event.source,
+        updatedAt: now,
+      },
+    }));
+  }, [setFaultOutputPins]);
+
+  const applyErrorFlagRead = useCallback((event: ErrorFlagReadEvent) => {
+    const snapshot = {
+      ...event,
+      receivedAt: Date.now(),
+    };
+
+    setErrorFlagLatest(snapshot);
+    setErrorFlagHistory((prev) => [...prev.slice(-(MAX_ERROR_HISTORY - 1)), snapshot]);
+  }, [setErrorFlagHistory, setErrorFlagLatest]);
+
+  const applyGpioStatusHeader = useCallback((source: string) => {
+    const now = Date.now();
+
+    setGpioMonitor((prev) => ({
+      ...prev,
+      lastHeaderSeenAt: now,
+      lastUpdatedAt: now,
+    }));
+
+    if (process.env.NODE_ENV !== 'production') {
+      console.log(`[GPIO] header detected: ${source}`);
+    }
+  }, [setGpioMonitor]);
+
+  const applyGpioOutputStatus = useCallback((event: GpioOutputStatusEvent) => {
+    const now = Date.now();
+
+    setGpioMonitor((prev) => ({
+      ...prev,
+      lastUpdatedAt: now,
+      outputs: {
+        ...prev.outputs,
+        [event.key]: {
+          ...prev.outputs[event.key],
+          label: event.label,
+          level: event.level,
+          source: event.source,
+          statusText: null,
+          updatedAt: now,
+        },
+      },
+    }));
+
+    setFaultOutputPins((prev) => ({
+      ...prev,
+      [event.key]: {
+        level: normalizeFaultOutputLevel(event.level),
+        source: event.source,
+        updatedAt: now,
+      },
+    }));
+  }, [setFaultOutputPins, setGpioMonitor]);
+
+  const applyGpioInputStatus = useCallback((event: GpioInputStatusEvent) => {
+    const now = Date.now();
+
+    setGpioMonitor((prev) => ({
+      ...prev,
+      inputs: {
+        ...prev.inputs,
+        [event.key]: {
+          ...prev.inputs[event.key],
+          label: event.label,
+          level: event.level,
+          source: event.source,
+          statusText: event.statusText,
+          updatedAt: now,
+        },
+      },
+      lastUpdatedAt: now,
+    }));
+  }, [setGpioMonitor]);
+
+  const applyGpioCommandBytes = useCallback((event: GpioCommandBytesEvent) => {
+    const now = Date.now();
+
+    setGpioMonitor((prev) => ({
+      ...prev,
+      lastCommandBytes: {
+        bytes: event.bytes,
+        commandId: event.commandId,
+        raw: event.source,
+        updatedAt: now,
+      },
+      lastUpdatedAt: now,
+    }));
+  }, [setGpioMonitor]);
+
+  const applySimLightRead = useCallback((event: SimLightReadEvent) => {
+    setWarningLights((prev) => (
+      prev.map((light) => ({
+        ...light,
+        isOn: ((event.mask >>> (light.id - 1)) & 0x1) === 1,
+      }))
+    ));
+  }, [setWarningLights]);
 
   const applyRohmRead = useCallback((addr: number, values: number[]) => {
     if (!values.length) return;
@@ -117,64 +360,121 @@ export function useSerial(options: UseSerialOptions = {}) {
     });
   }, [setRohmRegisterBytes]);
 
-  // 시스템 메시지 추가
-  const addSystemLine = useCallback(
-    (content: string) => {
-      const line: TerminalLine = { id: generateId(), timestamp: getTimestamp(), direction: 'system', content };
-      setTerminalLines((prev) => [...prev.slice(-999), line]);
-    },
-    [setTerminalLines]
-  );
+  const addSystemLine = useCallback((content: string) => {
+    appendTerminalLine({
+      id: generateId(),
+      timestamp: getTimestamp(),
+      direction: 'system',
+      content,
+    });
+  }, [appendTerminalLine]);
 
-  // RX 메시지 추가
-    const addRxLine = useCallback(
-    (rawContent: string) => {
-      const seq = ++serialRxLineSeq;
+  const addRxLine = useCallback((rawContent: string) => {
+    const seq = ++serialRxLineSeq;
+    const safeRaw = String(rawContent).replace(/\r/g, '\\r').replace(/\n/g, '\\n');
 
-      const safeRaw = String(rawContent).replace(/\r/g, '\\r').replace(/\n/g, '\\n');
-      if (process.env.NODE_ENV !== 'production') {
-        console.log(`[Serial][Renderer][RX] #${seq} raw="${safeRaw}"`);
+    if (process.env.NODE_ENV !== 'production') {
+      console.log(`[Serial][Renderer][RX] #${seq} raw="${safeRaw}"`);
+    }
+
+    if (ansiClearScreenCommand.test(rawContent)) {
+      setTerminalLines([]);
+    }
+
+    const content = sanitizeSerialLine(rawContent);
+    if (!content) return;
+
+    const chunks = content.split('\n').map((chunk) => chunk.trim()).filter(Boolean);
+    chunks.forEach((chunk) => {
+      const voltMonRead = parseVoltMonReadLine(chunk);
+      const voltMonStatus = parseVoltMonStatusLine(chunk);
+      const voltageSamples = parseVoltageLine(chunk);
+      if (
+        process.env.NODE_ENV !== 'production'
+        && voltageSamples.length === 0
+        && !voltMonRead
+        && !voltMonStatus
+        && !isIgnorableVoltMonControl(chunk)
+        && /VoltMon|ADC|VOLT|전압|voltage/i.test(chunk)
+      ) {
+        console.warn(`[Voltage Parse] no matched sample: ${chunk}`);
       }
 
-      if (ansiClearScreenCommand.test(rawContent)) {
-        setTerminalLines([]);
+      applyVoltageSamples(voltageSamples);
+      applyVoltMonEvents(parseVoltageEvents(chunk));
+
+      if (voltMonRead) {
+        applyVoltMonRead(voltMonRead);
       }
 
-      const content = sanitizeSerialLine(rawContent);
-      if (!content) return;
-
-      if (process.env.NODE_ENV !== 'production') {
-        console.log(`[RX RAW] ${content}`);
+      if (voltMonStatus) {
+        applyVoltMonStatus(voltMonStatus);
       }
 
-      const chunks = content.split('\n').map((chunk) => chunk.trim()).filter(Boolean);
-      chunks.forEach((chunk) => {
-        const voltageSamples = parseVoltageLine(chunk);
-        if (
-          process.env.NODE_ENV !== 'production'
-          && voltageSamples.length === 0
-          && !isIgnorableVoltMonControl(chunk)
-          && /VoltMon|ADC|VOLT|전압|voltage/i.test(chunk)
-        ) {
-          console.warn(`[Voltage Parse] no matched sample: ${chunk}`);
-        }
-        applyVoltageSamples(voltageSamples);
-        const voltageEvents = parseVoltageEvents(chunk);
-        logVoltageEvents(voltageEvents);
-        const rohmEvents = parseRohmProtocolLine(chunk);
-        rohmEvents.forEach((event) => {
-          if (event.type !== 'read-complete') return;
-          applyRohmRead(event.response.addr, event.response.values);
-        });
+      const faultOutput = parseFaultOutputLine(chunk);
+      if (faultOutput) {
+        applyFaultOutputStatus(faultOutput);
+      }
+
+      const errorFlag = parseErrorFlagLine(chunk);
+      if (errorFlag) {
+        applyErrorFlagRead(errorFlag);
+      }
+
+      if (isGpioStatusHeaderLine(chunk)) {
+        applyGpioStatusHeader(chunk);
+      }
+
+      const gpioOutput = parseGpioOutputLine(chunk);
+      if (gpioOutput) {
+        applyGpioOutputStatus(gpioOutput);
+      }
+
+      const gpioInput = parseGpioInputLine(chunk);
+      if (gpioInput) {
+        applyGpioInputStatus(gpioInput);
+      }
+
+      const gpioCommandBytes = parseGpioCommandBytesLine(chunk);
+      if (gpioCommandBytes) {
+        applyGpioCommandBytes(gpioCommandBytes);
+      }
+
+      const simLightRead = parseSimLightReadLine(chunk);
+      if (simLightRead) {
+        applySimLightRead(simLightRead);
+      }
+
+      const rohmEvents = parseRohmProtocolLine(chunk);
+      rohmEvents.forEach((event) => {
+        if (event.type !== 'read-complete') return;
+        applyRohmRead(event.response.addr, event.response.values);
       });
+    });
 
-      const line: TerminalLine = { id: generateId(), timestamp: getTimestamp(), direction: 'rx', content };
-      setTerminalLines((prev) => [...prev.slice(-999), line]);
-    },
-    [setTerminalLines, applyRohmRead, applyVoltageSamples, logVoltageEvents]
-  );
+    appendTerminalLine({
+      id: generateId(),
+      timestamp: getTimestamp(),
+      direction: 'rx',
+      content,
+    });
+  }, [
+    appendTerminalLine,
+    applyErrorFlagRead,
+    applyFaultOutputStatus,
+    applyGpioCommandBytes,
+    applyGpioInputStatus,
+    applyGpioOutputStatus,
+    applyGpioStatusHeader,
+    applyRohmRead,
+    applySimLightRead,
+    applyVoltageSamples,
+    applyVoltMonEvents,
+    applyVoltMonRead,
+    applyVoltMonStatus,
+    setTerminalLines,
+  ]);
 
-  // 포트 목록 새로고침
   const refreshPorts = useCallback(async () => {
     const portList = await serialService.listPorts();
     setPorts(portList);
@@ -189,12 +489,12 @@ export function useSerial(options: UseSerialOptions = {}) {
     }
   }, [addSystemLine, setConnected, setPortPath]);
 
-  // 연결
   const connect = useCallback(async () => {
     if (!portPath) {
       setToast({ type: 'warning', message: '포트를 선택해주세요.' });
       return;
     }
+
     resetRohmProtocolState();
     const result = await serialService.connect({ portPath, baudRate });
     if (result.success) {
@@ -221,7 +521,6 @@ export function useSerial(options: UseSerialOptions = {}) {
     setConnected(false);
   }, [portPath, baudRate, setConnected, addSystemLine, setToast, setPortPath]);
 
-  // 연결 해제
   const disconnect = useCallback(async () => {
     resetRohmProtocolState();
     const result = await serialService.disconnect();
@@ -232,27 +531,29 @@ export function useSerial(options: UseSerialOptions = {}) {
     }
   }, [setConnected, addSystemLine, setToast]);
 
-  // 데이터 전송
-  const send = useCallback(
-    async (data: string): Promise<SerialResult> => {
-      if (!connected) {
-        setToast({ type: 'warning', message: '포트가 연결되어 있지 않습니다.' });
-        return { success: false, error: '포트가 연결되어 있지 않습니다.' };
-      }
-      const txLine: TerminalLine = { id: generateId(), timestamp: getTimestamp(), direction: 'tx', content: data };
-      setTerminalLines((prev) => [...prev.slice(-999), txLine]);
-      const result = await serialService.write(data);
-      if (!result.success) {
-        const message = result.error || '시리얼 데이터 전송 실패';
-        addSystemLine(`✗ 전송 실패: ${message}`);
-        setToast({ type: 'error', message });
-      }
-      return result;
-    },
-    [addSystemLine, connected, setTerminalLines, setToast]
-  );
+  const send = useCallback(async (data: string): Promise<SerialResult> => {
+    if (!connected) {
+      setToast({ type: 'warning', message: '포트가 연결되어 있지 않습니다.' });
+      return { success: false, error: '포트가 연결되어 있지 않습니다.' };
+    }
 
-  // 시리얼 이벤트 리스너 등록
+    appendTerminalLine({
+      id: generateId(),
+      timestamp: getTimestamp(),
+      direction: 'tx',
+      content: data,
+    });
+
+    const result = await serialService.write(data);
+    if (!result.success) {
+      const message = result.error || '시리얼 데이터 전송 실패';
+      addSystemLine(`✗ 전송 실패: ${message}`);
+      setToast({ type: 'error', message });
+    }
+
+    return result;
+  }, [addSystemLine, appendTerminalLine, connected, setToast]);
+
   useEffect(() => {
     if (!manageSideEffects) return undefined;
 
@@ -275,12 +576,11 @@ export function useSerial(options: UseSerialOptions = {}) {
     };
   }, [addRxLine, addSystemLine, manageSideEffects, setConnected, setToast]);
 
-  // 초기 포트 목록 로드
   useEffect(() => {
     if (!manageSideEffects) return;
 
-    syncConnectedState();
-    refreshPorts();
+    void syncConnectedState();
+    void refreshPorts();
   }, [manageSideEffects, refreshPorts, syncConnectedState]);
 
   return {

@@ -87,7 +87,7 @@ const RegisterEditorPage: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [pollIntervalSeconds, setPollIntervalSeconds] = useState(DEFAULT_POLL_INTERVAL_SECONDS);
   const [continuousPolling, setContinuousPolling] = useState(false);
-  const [changedRowKeys, setChangedRowKeys] = useState<string[]>([]);
+  const [latchedChangedRowKeys, setLatchedChangedRowKeys] = useState<string[]>([]);
   const [editedValues, setEditedValues] = useState<Record<string, string>>({});
   const [selectedRowKey, setSelectedRowKey] = useState<string | null>(null);
   const [writeBusyRowKey, setWriteBusyRowKey] = useState<string | null>(null);
@@ -124,7 +124,7 @@ const RegisterEditorPage: React.FC = () => {
 
   const cacheByteCount = Object.keys(rawBytes).length;
   const resolvedCount = rows.filter((row) => row.resolved).length;
-  const changedCount = changedRowKeys.length;
+  const changedCount = latchedChangedRowKeys.length;
   const pollIntervalMs = useMemo(() => {
     const parsed = Number(pollIntervalSeconds);
     if (!Number.isFinite(parsed) || parsed <= 0) {
@@ -433,7 +433,7 @@ const RegisterEditorPage: React.FC = () => {
 
   const handleClearCache = useCallback(() => {
     resetRawBytes();
-    setChangedRowKeys([]);
+    setLatchedChangedRowKeys([]);
     setEditedValues({});
     setSelectedRowKey(null);
   }, [resetRawBytes]);
@@ -441,7 +441,7 @@ const RegisterEditorPage: React.FC = () => {
   useEffect(() => {
     if (cacheByteCount === 0) {
       previousRowValuesRef.current = {};
-      setChangedRowKeys([]);
+      setLatchedChangedRowKeys([]);
       return;
     }
 
@@ -462,7 +462,9 @@ const RegisterEditorPage: React.FC = () => {
     });
 
     previousRowValuesRef.current = nextSnapshot;
-    setChangedRowKeys(nextChangedKeys);
+    if (nextChangedKeys.length > 0) {
+      setLatchedChangedRowKeys((prev) => Array.from(new Set([...prev, ...nextChangedKeys])));
+    }
   }, [cacheByteCount, rows]);
 
   useEffect(() => {
@@ -545,17 +547,7 @@ const RegisterEditorPage: React.FC = () => {
   return (
     <div className="register-editor">
       <section className="register-editor__toolbar">
-        <div className="register-editor__toolbar-left">
-          <label className="register-editor__field register-editor__field--search">
-            <span className="register-editor__label">Search</span>
-            <input
-              className="input register-editor__search-input"
-              value={searchQuery}
-              onChange={(event) => setSearchQuery(event.target.value)}
-              placeholder="레지스터명 또는 0x0123"
-            />
-          </label>
-
+        <div className="register-editor__toolbar-main">
           <div className="register-editor__field">
             <span className="register-editor__label">Format</span>
             <div className="register-editor__toggle" role="tablist" aria-label="Value format">
@@ -575,9 +567,7 @@ const RegisterEditorPage: React.FC = () => {
               </button>
             </div>
           </div>
-        </div>
 
-        <div className="register-editor__toolbar-right">
           <div className="register-editor__field">
             <span className="register-editor__label">Polling</span>
             <div className="register-editor__poll-box">
@@ -600,25 +590,34 @@ const RegisterEditorPage: React.FC = () => {
               <span className="register-editor__poll-unit">sec</span>
             </div>
           </div>
+          <label className="register-editor__field register-editor__field--search">
+            <span className="register-editor__label">Search</span>
+            <input
+              className="input register-editor__search-input"
+              value={searchQuery}
+              onChange={(event) => setSearchQuery(event.target.value)}
+              placeholder="레지스터명 또는 0x0123"
+            />
+          </label>
+        </div>
 
-          <div className="register-editor__actions">
-            <button
-              className="btn btn--primary"
-              disabled={!connected || loading}
-              onClick={() => void handleReadAll()}
-              type="button"
-            >
-              Read All
-            </button>
-            <button
-              className="btn btn--ghost"
-              disabled={loading}
-              onClick={handleClearCache}
-              type="button"
-            >
-              Clear
-            </button>
-          </div>
+        <div className="register-editor__actions">
+          <button
+            className="btn btn--primary"
+            disabled={!connected || loading}
+            onClick={() => void handleReadAll()}
+            type="button"
+          >
+            Read All
+          </button>
+          <button
+            className="btn btn--ghost"
+            disabled={loading}
+            onClick={handleClearCache}
+            type="button"
+          >
+            Clear
+          </button>
         </div>
       </section>
 
@@ -644,15 +643,24 @@ const RegisterEditorPage: React.FC = () => {
           <div className="register-editor__empty">검색 결과가 없습니다.</div>
         ) : (
           <table className="register-editor__table">
+            <colgroup>
+              <col className="register-editor__col register-editor__col--addr" />
+              <col className="register-editor__col register-editor__col--register" />
+              <col className="register-editor__col register-editor__col--access" />
+              <col className="register-editor__col register-editor__col--value" />
+              <col className="register-editor__col register-editor__col--raw" />
+              <col className="register-editor__col register-editor__col--description" />
+              <col className="register-editor__col register-editor__col--write" />
+            </colgroup>
             <thead>
               <tr>
-                <th style={{ width: 112 }}>Addr</th>
-                <th style={{ width: 240 }}>Register</th>
-                <th style={{ width: 84 }}>R/W</th>
-                <th style={{ width: 220 }}>Field Value</th>
-                <th style={{ width: 168 }}>Raw</th>
-                <th>Description</th>
-                <th style={{ width: 100 }}>Write</th>
+                <th>Addr</th>
+                <th>Register</th>
+                <th>R/W</th>
+                <th>Field Value</th>
+                <th>Raw</th>
+                <th>설명</th>
+                <th>Write</th>
               </tr>
             </thead>
             <tbody>
@@ -660,7 +668,7 @@ const RegisterEditorPage: React.FC = () => {
                 const displayValue = getDisplayValue(row);
                 const draftDirty = isDraftDirty(row);
                 const draftValid = !displayValue.trim() || isDraftValid(row);
-                const valueChanged = changedRowKeys.includes(row.key);
+                const valueChanged = latchedChangedRowKeys.includes(row.key);
                 const writePending = writeBusyRowKey === row.key;
 
                 return (
@@ -675,10 +683,7 @@ const RegisterEditorPage: React.FC = () => {
                     onClick={() => setSelectedRowKey(row.key)}
                   >
                     <td>
-                      <div className="register-editor__addr-stack">
-                        <span className="register-editor__addr-hex">{row.primaryAddressHex}</span>
-                        <span className="register-editor__addr-dec">{row.primaryAddressDec}</span>
-                      </div>
+                      <span className="register-editor__addr-hex">{row.primaryAddressHex}</span>
                     </td>
                     <td>
                       <div className="register-editor__name">{row.name}</div>
@@ -703,7 +708,9 @@ const RegisterEditorPage: React.FC = () => {
                           placeholder={row.resolved ? '' : '--'}
                           value={displayValue}
                         />
-                        {valueChanged && <span className="register-editor__delta">updated</span>}
+                        <span className={`register-editor__delta ${valueChanged ? 'register-editor__delta--latched' : ''}`}>
+                          {valueChanged ? 'LATCHED' : ''}
+                        </span>
                       </div>
                     </td>
                     <td>

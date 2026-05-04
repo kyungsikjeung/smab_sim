@@ -12,13 +12,16 @@ interface NavItem {
 }
 
 const NAV_ITEMS: NavItem[] = [
-  { path: '/terminal',        label: '시리얼 터미널',    icon: '⌨',  section: 'MONITOR' },
-  { path: '/commands',        label: 'CMD 명령어',      icon: '⌨' },
-  { path: '/register',        label: '레지스터 R/W',     icon: '⎍' },
-  { path: '/rohm-monitor',    label: 'ROHM 모니터',     icon: '◎' },
-  { path: '/voltage-monitor', label: '전압 모니터링',    icon: '⚡' },
+  { path: '/error-monitor',   label: '에러 모니터링',      icon: '⚑', section: 'MONITOR' },
+  { path: '/fault-log-monitor', label: '최근 에러 5건',   icon: '▤' },
+  { path: '/gpio-monitor',    label: 'GPIO 모니터링',     icon: '⎇' },
+  { path: '/register',        label: '레지스터 모니터링', icon: '⎍' },
+  { path: '/voltage-monitor', label: '전압 모니터링',     icon: '⚡' },
   { path: '/warning-lights',  label: '경고등 제어',      icon: '◉',  section: 'CONTROL' },
   { path: '/display-control', label: '디스플레이 제어',  icon: '▣' },
+  { path: '/fault-injection', label: 'Fault Injection', icon: '⚠' },
+  { path: '/terminal',        label: '시리얼 터미널',    icon: '⌨',  section: 'HELP' },
+  { path: '/commands',        label: 'CMD 명령어',      icon: '⌘' },
   { path: '/test-automation', label: '테스트 자동화',    icon: '⟳',  section: 'AUTOMATION' },
 ];
 
@@ -33,10 +36,10 @@ const Sidebar: React.FC = () => {
     <aside className={`sidebar ${collapsed ? 'sidebar--collapsed' : ''}`}>
       {/* ── Brand ── */}
       <div className="sidebar__brand">
-        <div className="sidebar__logo">R8</div>
+        <div className="sidebar__logo">SB</div>
         <div className="sidebar__brand-text">
-          <span className="sidebar__brand-name">RH850 Pilot</span>
-          <span className="sidebar__brand-sub">MCU Control Suite</span>
+          <span className="sidebar__brand-name">Tovis SMAB Project</span>
+          <span className="sidebar__brand-sub">Safety MCU AD Bord</span>
         </div>
       </div>
 

@@ -22,36 +22,48 @@
 - 필터링 (ALL / RX / TX / SYS)
 - Auto-scroll, Clear, 커맨드 직접 입력 & 전송
 
-### 기능 2: 레지스터 읽기/쓰기
+### 기능 2: 에러 모니터링
+- `error read` 1회 조회 및 Continuous polling
+- 모니터링 주기(ms) 설정
+- `[error] flags=0x0` 형태 응답 파싱
+- 32bit fault bitmap을 bit/mask/name/meaning 기준으로 decode
+- 각 bit를 `1 = Error`, `0 = Normal`로 시각화
+
+### 기능 3: 레지스터 읽기/쓰기
 - 주소(Hex) 기반 Read / Write 커맨드 전송
 - 읽어온 레지스터 테이블 표시 (Address, Name, Value, Description)
 - Bit Field 분석 뷰 (Bits, Field Name, Value, Description)
 
-### 기능 3: 경고등 제어 (1~24)
-- 4×6 그리드 형태의 24개 경고등 인디케이터
+### 기능 4: 경고등 제어 (1~31)
+- 1번부터 31번까지 경고등 인디케이터 제어
 - 개별 On/Off 토글 + 시리얼 커맨드 자동 전송
 - All ON / All OFF 일괄 제어
 - 활성화 상태 카운트 표시
 
-### 기능 4: 실시간 전압 모니터링 (CH1~CH6)
+### 기능 5: 실시간 전압 모니터링 (CH1~CH6)
 - 6채널 실시간 전압 라인 차트 (Recharts)
 - 채널별 활성화/비활성화 선택
 - 전압 범위 설정 (기본 0~3.3V)
 - 채널별 현재 값 실시간 표시
 - 고유 색상 코딩
 
-### 기능 5: 디스플레이 제어
+### 기능 6: 디스플레이 제어
 - Device Init String RX 감지 시 자동 영상 송출 트리거
 - Trigger String 커스터마이징
 - Manual Start / Stop 제어
 - 상태 표시 (WAITING → READY → STREAMING)
 - 디스플레이 스펙 표시 (1920×720, GMSL, 24-bit, 60Hz)
 
-### 기능 6: 테스트 자동화
+### 기능 7: 테스트 자동화
 - 테스트 시퀀스 생성/삭제
+- 시퀀스별 Python 파일(`.py`) 등록 및 실행
+- 파일이 없으면 `Python 파일을 등록해주세요.` 안내 표시
 - 스텝 추가: Send / Expect / Delay / Wait
-- 시퀀스 순차 실행
-- 실행 상태 시각적 피드백
+- Expect / Wait에서 문자열 포함 또는 Regex 매칭 지원
+- 시퀀스 카드 및 step 카드 드래그앤드롭 순서 조정
+- Quick Save / Restore와 JSON Import / Export 지원
+- 기본 프리셋 `에러 모니터링` 제공 (`error read` -> `^\[error\] flags=0x([0-9A-F]+)$`)
+- Python Console로 실행 상태와 stdout/stderr 피드백 제공
 
 ---
 
@@ -86,8 +98,9 @@ rh850-pilot/
 │   │   ├── Sidebar/          # Sidebar.tsx (네비게이션)
 │   │   ├── Header/           # Header.tsx (시리얼 제어 바)
 │   │   ├── Terminal/         # TerminalPage.tsx (로그 모니터)
-│   │   ├── Register/         # RegisterPage.tsx (레지스터 R/W)
-│   │   ├── WarningLights/    # WarningLightsPage.tsx (경고등 24개)
+│   │   ├── ErrorMonitor/     # ErrorMonitorPage.tsx (error flags 모니터)
+│   │   ├── Register/         # RegisterEditorPage.tsx (레지스터 R/W)
+│   │   ├── WarningLights/    # WarningLightsPage.tsx (경고등 31개)
 │   │   ├── VoltageMonitor/   # VoltageMonitorPage.tsx (전압 차트)
 │   │   ├── DisplayControl/   # DisplayControlPage.tsx (영상 송출)
 │   │   └── TestAutomation/   # TestAutomationPage.tsx (시퀀스)
@@ -154,14 +167,15 @@ npm run build
                   useSerial Hook → Recoil Atoms
                         ↕
               [UI Components]
-                  Pages (6개 라우트)
+                  Pages (8개 라우트)
 ```
 
 ### 상태 관리 (Recoil)
 - **Serial State**: 연결 상태, 포트 정보, Baud Rate
 - **Terminal State**: 로그 라인, 필터, Auto-scroll
+- **Error Monitor State**: 최신 flags snapshot, 수신 history
 - **Register State**: 레지스터 목록, 로딩 상태
-- **Warning Lights State**: 24개 경고등 On/Off
+- **Warning Lights State**: 31개 경고등 On/Off
 - **Voltage State**: 6채널 데이터, 범위 설정
 - **Display State**: Init 감지, 스트리밍 상태
 - **Test State**: 시퀀스 목록, 실행 상태

@@ -1,7 +1,7 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 /**
- * RH850 Pilot - Preload Script
+ * Tovis SB - Preload Script
  * contextBridge를 통해 Renderer 프로세스에 안전한 IPC API를 노출합니다.
  * 모든 시리얼 통신은 이 bridge를 통해 이루어집니다.
  */
@@ -48,6 +48,25 @@ contextBridge.exposeInMainWorld('electronAPI', {
       const handler = (_event, data) => callback(data);
       ipcRenderer.on('automation:output', handler);
       return () => ipcRenderer.removeListener('automation:output', handler);
+    },
+  },
+
+  // ── Heartbeat Display Window API ──
+  display: {
+    openHeartbeatWindow: () => ipcRenderer.invoke('display-window:open-heartbeat'),
+    closeHeartbeatWindow: () => ipcRenderer.invoke('display-window:close-heartbeat'),
+    startHeartbeat: () => ipcRenderer.invoke('display-window:start-heartbeat'),
+    stopHeartbeat: () => ipcRenderer.invoke('display-window:stop-heartbeat'),
+    setHeartbeatEnabled: (enabled) => ipcRenderer.invoke('display-window:set-heartbeat-enabled', enabled),
+    setOverlayRect: (overlay) => ipcRenderer.invoke('display-window:set-overlay-rect', overlay),
+    setOverlayRects: (overlays) => ipcRenderer.invoke('display-window:set-overlay-rects', overlays),
+    clearOverlayRect: () => ipcRenderer.invoke('display-window:clear-overlay-rect'),
+    clearOverlayRects: () => ipcRenderer.invoke('display-window:clear-overlay-rects'),
+    status: () => ipcRenderer.invoke('display-window:status'),
+    onState: (callback) => {
+      const handler = (_event, data) => callback(data);
+      ipcRenderer.on('display-window:state', handler);
+      return () => ipcRenderer.removeListener('display-window:state', handler);
     },
   },
 });

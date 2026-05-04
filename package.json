@@ -1,6 +1,7 @@
 {
-  "name": "rh850-pilot",
+  "name": "safety-mcu-ad-board",
   "version": "1.0.0",
+  "author": "ksjeung",
   "description": "RH850 MCU Board Control & Testing Desktop Application",
   "main": "electron/main.js",
   "homepage": "./",
@@ -9,7 +10,7 @@
     "build:react": "react-scripts build",
     "start:electron": "node scripts/start-electron.js",
     "dev": "concurrently \"npm run start:react\" \"wait-on http://localhost:3000 && npm run start:electron\"",
-    "build": "npm run build:react && electron-builder",
+    "build": "npm run build:react && electron-builder --win nsis --x64 --publish=never",
     "test": "react-scripts test"
   },
   "dependencies": {
@@ -33,15 +34,28 @@
     "wait-on": "^7.2.0"
   },
   "build": {
-    "appId": "com.rh850pilot.app",
-    "productName": "RH850 Pilot",
+    "extends": null,
+    "appId": "com.safety-mcu-ad-board.app",
+    "productName": "Tovis SMAB",
+    "extraMetadata": {
+      "main": "electron/main.js"
+    },
     "files": [
       "build/**/*",
       "electron/**/*",
       "node_modules/**/*"
     ],
+    "asarUnpack": [
+      "node_modules/serialport/**",
+      "node_modules/@serialport/**"
+    ],
     "directories": {
+      "output": "release",
       "buildResources": "public"
+    },
+    "win": {
+      "target": "nsis",
+      "signAndEditExecutable": false
     }
   },
   "browserslist": {

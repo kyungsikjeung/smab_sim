@@ -2,6 +2,25 @@
   display: flex;
   flex-direction: column;
   gap: 12px;
+  min-height: 0;
+}
+
+.command-page--split {
+  height: calc(100vh - var(--header-height) - 40px);
+  overflow: hidden;
+}
+
+.command-page__controls {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0;
+}
+
+.command-page--split .command-page__controls {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  padding-right: 4px;
 }
 
 .command-page__top {
@@ -9,6 +28,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+  flex-wrap: wrap;
 }
 
 .command-page__title {
@@ -20,6 +40,7 @@
 .command-page__quick {
   display: flex;
   gap: 8px;
+  flex-wrap: wrap;
 }
 
 .command-page__inline-input {
@@ -29,4 +50,82 @@
 
 .command-page__inline-input .input {
   flex: 1;
+}
+
+.command-page__terminal {
+  flex: 0 0 clamp(280px, 40vh, 420px);
+  min-height: clamp(280px, 40vh, 420px);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background:
+    linear-gradient(180deg, rgba(14, 22, 44, 0.96), rgba(8, 13, 27, 0.98));
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  box-shadow: var(--shadow-md);
+}
+
+.command-page__terminal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border-subtle);
+  background: rgba(15, 23, 48, 0.88);
+  flex-shrink: 0;
+}
+
+.command-page__terminal-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.command-page__terminal-title {
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.command-page__terminal-subtitle {
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.command-page__terminal-meta {
+  color: var(--text-tertiary);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.command-page__terminal-log {
+  flex: 1;
+  min-height: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+@media (max-width: 960px) {
+  .command-page--split {
+    height: auto;
+    min-height: calc(100vh - var(--header-height) - 40px);
+    overflow: visible;
+  }
+
+  .command-page--split .command-page__controls {
+    overflow: visible;
+    padding-right: 0;
+  }
+
+  .command-page__inline-input {
+    flex-direction: column;
+  }
+
+  .command-page__terminal {
+    flex-basis: min(40vh, 360px);
+    min-height: min(40vh, 360px);
+  }
 }

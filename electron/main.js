@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain } = require('electron');
+const { app, BrowserWindow, ipcMain, screen } = require('electron');
 const { spawn } = require('child_process');
 const fs = require('fs');
 const path = require('path');
@@ -10,10 +10,11 @@ try {
   const sp = require('serialport');
   SerialPort = sp.SerialPort;
 } catch (e) {
-  console.warn('[RH850 Pilot] serialport 모듈 로드 실패:', e.message);
+  console.warn('[Tovis SB] serialport 모듈 로드 실패:', e.message);
 }
 
 let mainWindow = null;
+let heartbeatWindow = null;
 let activePort = null;
 let activeAutomationProcess = null;
 let activeAutomationScriptPath = null;
@@ -22,6 +23,17 @@ let serialRxBuffer = '';
 let serialRxFlushTimer = null;
 
 const SERIAL_RX_FLUSH_DELAY_MS = 40;
+const HEARTBEAT_DISPLAY_URL = '/heartbeat-display.html';
+const HEARTBEAT_BACKGROUND_IMAGE = './BackgroundImage/cluster_bg_1920x720.png';
+const HEARTBEAT_DISPLAY_WIDTH = 1920;
+const HEARTBEAT_DISPLAY_HEIGHT = 720;
+const DEFAULT_HEARTBEAT_OVERLAY_COLOR = '#ff3b30';
+
+const heartbeatDisplayState = {
+  heartbeatEnabled: true,
+  overlayRect: null,
+  overlayRects: [],
+};
 
 const PYTHON_CANDIDATES = process.platform === 'win32'
   ? [
@@ -34,10 +46,32 @@ const PYTHON_CANDIDATES = process.platform === 'win32'
       { command: 'python', args: [] },
     ];
 
-const getEventTimestamp = () => new Date().toLocaleTimeString('ko-KR', {
-  hour12: false,
-  fractionalSecondDigits: 3,
-});
+const padNumber = (value, digits = 2) => String(value).padStart(digits, '0');
+
+const buildFallbackTime = (date) => [
+  [
+    padNumber(date.getHours()),
+    padNumber(date.getMinutes()),
+    padNumber(date.getSeconds()),
+  ].join(':'),
+  padNumber(date.getMilliseconds(), 3),
+].join('.');
+
+const getEventTimestamp = () => {
+  const now = new Date();
+
+  try {
+    return now.toLocaleTimeString('ko-KR', {
+      hour12: false,
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      fractionalSecondDigits: 3,
+    });
+  } catch (_error) {
+    return buildFallbackTime(now);
+  }
+};
 
 const clearSerialRxFlushTimer = () => {
   if (serialRxFlushTimer) {
@@ -191,7 +225,7 @@ function createWindow() {
     height: 900,
     minWidth: 1200,
     minHeight: 700,
-    title: 'RH850 Pilot',
+    title: 'Tovis SMAB',
     backgroundColor: '#0a0f1e',
     webPreferences: {
       nodeIntegration: false,
@@ -211,6 +245,268 @@ function createWindow() {
   mainWindow.loadURL(startUrl);
   mainWindow.on('closed', () => { mainWindow = null; });
 }
+
+const isHeartbeatWindowOpen = () => Boolean(heartbeatWindow && !heartbeatWindow.isDestroyed());
+
+const cloneOverlayRect = (overlayRect) => {
+  if (!overlayRect) return null;
+
+  return { ...overlayRect };
+};
+
+const cloneOverlayRects = (overlayRects) => {
+  if (!Array.isArray(overlayRects) || overlayRects.length === 0) {
+    return [];
+  }
+
+  return overlayRects.map((overlayRect) => ({ ...overlayRect }));
+};
+
+const normalizeInteger = (value, fallback = null) => {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.round(parsed);
+};
+
+const normalizeOverlayRect = (payload = {}) => {
+  const width = normalizeInteger(payload.width);
+  const height = normalizeInteger(payload.height);
+
+  return {
+    color: typeof payload.color === 'string' && payload.color.trim()
+      ? payload.color.trim()
+      : DEFAULT_HEARTBEAT_OVERLAY_COLOR,
+    height: typeof height === 'number' && height > 0 ? height : null,
+    id: typeof payload.id === 'number' || typeof payload.id === 'string'
+      ? payload.id
+      : undefined,
+    label: typeof payload.label === 'string' && payload.label.trim()
+      ? payload.label.trim()
+      : undefined,
+    refColor: Number.isFinite(payload.refColor) ? Number(payload.refColor) : null,
+    source: typeof payload.source === 'string' && payload.source.trim()
+      ? payload.source.trim()
+      : undefined,
+    visible: Boolean(width && width > 0 && height && height > 0),
+    width: typeof width === 'number' && width > 0 ? width : null,
+    x: normalizeInteger(payload.x, 0),
+    y: normalizeInteger(payload.y, 0),
+  };
+};
+
+const normalizeOverlayRects = (payloads = []) => {
+  if (!Array.isArray(payloads)) {
+    return [];
+  }
+
+  return payloads
+    .map((payload) => normalizeOverlayRect(payload))
+    .filter((overlayRect) => overlayRect.visible);
+};
+
+const getHeartbeatDisplayUrl = () => {
+  if (process.env.ELECTRON_START_URL) {
+    return new URL(HEARTBEAT_DISPLAY_URL, process.env.ELECTRON_START_URL).toString();
+  }
+
+  return url.format({
+    pathname: path.join(__dirname, '..', 'build', 'heartbeat-display.html'),
+    protocol: 'file:',
+    slashes: true,
+  });
+};
+
+const buildHeartbeatWindowStatus = (error = null) => ({
+  backgroundImage: HEARTBEAT_BACKGROUND_IMAGE,
+  displayAvailable: screen.getAllDisplays().length > 0,
+  heartbeatEnabled: heartbeatDisplayState.heartbeatEnabled,
+  open: isHeartbeatWindowOpen(),
+  overlayRect: cloneOverlayRect(heartbeatDisplayState.overlayRect),
+  overlayRects: cloneOverlayRects(heartbeatDisplayState.overlayRects),
+  url: HEARTBEAT_DISPLAY_URL,
+  error,
+});
+
+const getScaledDisplaySize = (display) => ({
+  width: Math.round(display.bounds.width * (display.scaleFactor || 1)),
+  height: Math.round(display.bounds.height * (display.scaleFactor || 1)),
+});
+
+const matchesHeartbeatDisplaySize = (display) => {
+  const scaledSize = getScaledDisplaySize(display);
+
+  return (
+    (display.bounds.width === HEARTBEAT_DISPLAY_WIDTH && display.bounds.height === HEARTBEAT_DISPLAY_HEIGHT)
+    || (display.workArea.width === HEARTBEAT_DISPLAY_WIDTH && display.workArea.height === HEARTBEAT_DISPLAY_HEIGHT)
+    || (display.size?.width === HEARTBEAT_DISPLAY_WIDTH && display.size?.height === HEARTBEAT_DISPLAY_HEIGHT)
+    || (scaledSize.width === HEARTBEAT_DISPLAY_WIDTH && scaledSize.height === HEARTBEAT_DISPLAY_HEIGHT)
+  );
+};
+
+const getDedicatedHeartbeatDisplay = () => {
+  const displays = screen.getAllDisplays();
+  return displays.find(matchesHeartbeatDisplaySize) || null;
+};
+
+const getHeartbeatTargetDisplay = () => {
+  const displays = screen.getAllDisplays();
+  return getDedicatedHeartbeatDisplay() || screen.getPrimaryDisplay() || displays[0] || null;
+};
+
+const getHeartbeatWindowBounds = (targetDisplay, useFullscreen) => {
+  if (!targetDisplay) return null;
+  if (useFullscreen) return targetDisplay.bounds;
+
+  const targetWidth = Math.min(HEARTBEAT_DISPLAY_WIDTH, targetDisplay.workArea.width);
+  const targetHeight = Math.min(HEARTBEAT_DISPLAY_HEIGHT, targetDisplay.workArea.height);
+
+  return {
+    x: targetDisplay.workArea.x + Math.max(0, Math.round((targetDisplay.workArea.width - targetWidth) / 2)),
+    y: targetDisplay.workArea.y + Math.max(0, Math.round((targetDisplay.workArea.height - targetHeight) / 2)),
+    width: targetWidth,
+    height: targetHeight,
+  };
+};
+
+const forceHeartbeatWindowToFront = (targetDisplay = null, useFullscreen = false) => {
+  if (!isHeartbeatWindowOpen()) {
+    return;
+  }
+
+  if (targetDisplay) {
+    const nextBounds = getHeartbeatWindowBounds(targetDisplay, useFullscreen);
+    if (nextBounds) {
+      heartbeatWindow.setBounds(nextBounds);
+    }
+  }
+
+  if (heartbeatWindow.isMinimized()) {
+    heartbeatWindow.restore();
+  }
+
+  heartbeatWindow.setFullScreen(useFullscreen);
+  heartbeatWindow.setKiosk(useFullscreen);
+  heartbeatWindow.setAlwaysOnTop(true, useFullscreen ? 'screen-saver' : 'normal');
+  heartbeatWindow.show();
+
+  if (typeof heartbeatWindow.moveTop === 'function') {
+    heartbeatWindow.moveTop();
+  }
+
+  heartbeatWindow.focus();
+};
+
+const emitHeartbeatWindowState = (error = null) => {
+  const status = buildHeartbeatWindowStatus(error);
+
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('display-window:state', status);
+  }
+
+  if (isHeartbeatWindowOpen()) {
+    heartbeatWindow.webContents.send('heartbeat-display:state', status);
+  }
+
+  return status;
+};
+
+const openHeartbeatWindow = async () => {
+  const dedicatedDisplay = getDedicatedHeartbeatDisplay();
+  const targetDisplay = getHeartbeatTargetDisplay();
+  const useFullscreen = Boolean(dedicatedDisplay);
+
+  if (isHeartbeatWindowOpen()) {
+    forceHeartbeatWindowToFront(targetDisplay, useFullscreen);
+    return { success: true, status: emitHeartbeatWindowState() };
+  }
+
+  if (!targetDisplay) {
+    const message = '사용 가능한 디스플레이를 찾지 못했습니다.';
+    return { success: false, error: message, status: emitHeartbeatWindowState(message) };
+  }
+
+  const windowBounds = getHeartbeatWindowBounds(targetDisplay, useFullscreen);
+
+  heartbeatWindow = new BrowserWindow({
+    ...windowBounds,
+    fullscreen: useFullscreen,
+    kiosk: useFullscreen,
+    movable: !useFullscreen,
+    resizable: !useFullscreen,
+    show: false,
+    frame: false,
+    autoHideMenuBar: true,
+    backgroundColor: '#000000',
+    title: 'Heartbeat Display',
+    webPreferences: {
+      nodeIntegration: false,
+      contextIsolation: true,
+      preload: path.join(__dirname, 'heartbeatPreload.js'),
+    },
+  });
+
+  heartbeatWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+
+  heartbeatWindow.webContents.on('before-input-event', (event, input) => {
+    const key = String(input.key || '').toLowerCase();
+    if (key === 'escape' || (input.control && key === 'w')) {
+      event.preventDefault();
+      if (isHeartbeatWindowOpen()) {
+        heartbeatWindow.close();
+      }
+    }
+  });
+
+  heartbeatWindow.on('closed', () => {
+    heartbeatWindow = null;
+    emitHeartbeatWindowState();
+  });
+
+  heartbeatWindow.webContents.on('did-fail-load', (_event, _errorCode, errorDescription) => {
+    emitHeartbeatWindowState(errorDescription || 'Heartbeat 화면 로드 실패');
+  });
+
+  heartbeatWindow.webContents.on('did-finish-load', () => {
+    emitHeartbeatWindowState();
+  });
+
+  try {
+    await heartbeatWindow.loadURL(getHeartbeatDisplayUrl());
+    forceHeartbeatWindowToFront(targetDisplay, useFullscreen);
+    return { success: true, status: emitHeartbeatWindowState() };
+  } catch (error) {
+    const message = error && error.message ? error.message : 'Heartbeat 화면 로드 실패';
+    if (isHeartbeatWindowOpen()) {
+      heartbeatWindow.close();
+    }
+    return { success: false, error: message, status: emitHeartbeatWindowState(message) };
+  }
+};
+
+const setHeartbeatEnabled = (enabled) => {
+  heartbeatDisplayState.heartbeatEnabled = Boolean(enabled);
+  return emitHeartbeatWindowState();
+};
+
+const setHeartbeatOverlayRect = (payload) => {
+  const overlayRect = normalizeOverlayRect(payload);
+  heartbeatDisplayState.overlayRect = overlayRect;
+  heartbeatDisplayState.overlayRects = overlayRect.visible ? [overlayRect] : [];
+  return emitHeartbeatWindowState();
+};
+
+const setHeartbeatOverlayRects = (payloads) => {
+  const overlayRects = normalizeOverlayRects(payloads);
+  heartbeatDisplayState.overlayRects = overlayRects;
+  heartbeatDisplayState.overlayRect = overlayRects[0] || null;
+  return emitHeartbeatWindowState();
+};
+
+const clearHeartbeatOverlayRect = () => {
+  heartbeatDisplayState.overlayRect = null;
+  heartbeatDisplayState.overlayRects = [];
+  return emitHeartbeatWindowState();
+};
 
 app.whenReady().then(createWindow);
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
@@ -361,6 +657,78 @@ ipcMain.handle('serial:status', async () => {
     connected: activePort ? activePort.isOpen : false,
     port: activePort ? activePort.path : null,
   };
+});
+
+// ─── IPC: Heartbeat Display Window ─────────────────────────────────
+
+ipcMain.handle('display-window:open-heartbeat', async () => {
+  try {
+    return await openHeartbeatWindow();
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('display-window:close-heartbeat', async () => {
+  if (!isHeartbeatWindowOpen()) {
+    return { success: true, status: emitHeartbeatWindowState() };
+  }
+
+  await new Promise((resolve) => {
+    const currentWindow = heartbeatWindow;
+    if (!currentWindow || currentWindow.isDestroyed()) {
+      resolve();
+      return;
+    }
+
+    currentWindow.once('closed', () => resolve());
+    currentWindow.close();
+  });
+
+  return { success: true, status: buildHeartbeatWindowStatus() };
+});
+
+ipcMain.handle('display-window:start-heartbeat', async () => ({
+  success: true,
+  status: setHeartbeatEnabled(true),
+}));
+
+ipcMain.handle('display-window:stop-heartbeat', async () => ({
+  success: true,
+  status: setHeartbeatEnabled(false),
+}));
+
+ipcMain.handle('display-window:set-heartbeat-enabled', async (_event, enabled) => ({
+  success: true,
+  status: setHeartbeatEnabled(enabled),
+}));
+
+ipcMain.handle('display-window:set-overlay-rect', async (_event, payload) => ({
+  success: true,
+  status: setHeartbeatOverlayRect(payload),
+}));
+
+ipcMain.handle('display-window:set-overlay-rects', async (_event, payloads) => ({
+  success: true,
+  status: setHeartbeatOverlayRects(payloads),
+}));
+
+ipcMain.handle('display-window:clear-overlay-rect', async () => ({
+  success: true,
+  status: clearHeartbeatOverlayRect(),
+}));
+
+ipcMain.handle('display-window:clear-overlay-rects', async () => ({
+  success: true,
+  status: clearHeartbeatOverlayRect(),
+}));
+
+ipcMain.handle('display-window:status', async () => buildHeartbeatWindowStatus());
+
+ipcMain.handle('heartbeat-display:get-state', async () => buildHeartbeatWindowStatus());
+
+ipcMain.on('heartbeat-display:ready', (event) => {
+  event.sender.send('heartbeat-display:state', buildHeartbeatWindowStatus());
 });
 
 // ─── IPC: Python Automation API ─────────────────────────────────────

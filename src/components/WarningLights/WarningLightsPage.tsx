@@ -1,13 +1,14 @@
-import React, { useCallback } from 'react';
+import React, { useCallback, useEffect, useRef } from 'react';
 import { useRecoilState } from 'recoil';
-import { warningLightsState } from 'state/atoms';
+import { WARNING_LIGHT_COUNT, warningLightsState } from 'state/atoms';
 import { useSerial } from 'hooks/useSerial';
 import { WarningLight } from 'types';
 import './WarningLights.css';
 
 const toLightsMask = (lights: WarningLight[]) => {
-  const bitMask = lights.reduce((acc, light, index) => {
-    return acc | (light.isOn ? (1 << index) : 0);
+  const bitMask = lights.reduce((acc, light) => {
+    const lightBit = light.isOn ? (1 << (light.id - 1)) >>> 0 : 0;
+    return (acc | lightBit) >>> 0;
   }, 0);
 
   return bitMask.toString(16).toUpperCase().padStart(8, '0');
@@ -17,6 +18,23 @@ const WarningLightsPage: React.FC = () => {
   const { send, connected } = useSerial();
   const [lights, setLights] = useRecoilState(warningLightsState);
   const activeCount = lights.filter((l) => l.isOn).length;
+  const totalCount = lights.length || WARNING_LIGHT_COUNT;
+  const syncRequestedRef = useRef(false);
+
+  useEffect(() => {
+    if (!connected || syncRequestedRef.current) {
+      return undefined;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      syncRequestedRef.current = true;
+      void send('simlightr');
+    }, 0);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [connected, send]);
 
   const setLightsAndSend = useCallback(
     (nextLights: WarningLight[]) => {
@@ -48,7 +66,7 @@ const WarningLightsPage: React.FC = () => {
     <div className="warning-page">
       <div className="warning__toolbar">
         <div className="warning__info">
-          활성화된 경고등: <strong>{activeCount}</strong> / 24
+          활성화된 경고등: <strong>{activeCount}</strong> / {totalCount}
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
           <button className="btn btn--secondary btn--sm" onClick={allOn}>All ON</button>

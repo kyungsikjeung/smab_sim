@@ -3,6 +3,8 @@ import { shellCommandCatalog, shellCommandCategories, ShellCommandDefinition } f
 
 interface ShellCommandPanelProps {
   onSend: (command: string) => Promise<unknown> | void;
+  selectedCategory?: string;
+  onCategoryChange?: (category: string) => void;
 }
 
 const getDefaultPayload = (command: ShellCommandDefinition): string => {
@@ -15,8 +17,20 @@ const getDefaultPayload = (command: ShellCommandDefinition): string => {
   return command.command;
 };
 
-const ShellCommandPanel: React.FC<ShellCommandPanelProps> = ({ onSend }) => {
-  const [categoryFilter, setCategoryFilter] = useState<string>('all');
+const ShellCommandPanel: React.FC<ShellCommandPanelProps> = ({
+  onSend,
+  selectedCategory,
+  onCategoryChange,
+}) => {
+  const [internalCategoryFilter, setInternalCategoryFilter] = useState<string>('all');
+  const categoryFilter = selectedCategory ?? internalCategoryFilter;
+
+  const handleCategoryChange = (nextCategory: string) => {
+    if (selectedCategory === undefined) {
+      setInternalCategoryFilter(nextCategory);
+    }
+    onCategoryChange?.(nextCategory);
+  };
 
   const filteredCommands = useMemo(
     () =>
@@ -39,7 +53,7 @@ const ShellCommandPanel: React.FC<ShellCommandPanelProps> = ({ onSend }) => {
         <select
           className="terminal__shell-select"
           value={categoryFilter}
-          onChange={(e) => setCategoryFilter(e.target.value)}
+          onChange={(e) => handleCategoryChange(e.target.value)}
         >
           <option value="all">전체</option>
           {shellCommandCategories.map((category) => (

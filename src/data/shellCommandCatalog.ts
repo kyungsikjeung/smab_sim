@@ -17,21 +17,18 @@ export interface ShellCommandDefinition {
 }
 
 export const shellCommandCatalog: ShellCommandDefinition[] = [
-  // Shell Core
   { command: 'help', handler: 'help', category: 'Shell Core', module: 'shell.c', description: '등록된 shell 명령 목록과 도움말 출력' },
   { command: 'status', handler: 'cmd_exec_status', category: 'Shell Core', module: 'shell.c', description: '이전 명령 실행 결과 코드 확인' },
   { command: 'clear', handler: 'cmd_clear_screen', category: 'Shell Core', module: 'shell.c', description: '터미널 화면 지움(ANSI clear 시퀀스)' },
   { command: 'cls', handler: 'cmd_cls_screen', category: 'Shell Core', module: 'shell.c', description: '`clear`와 동일 동작 별칭' },
   { command: 'history', handler: 'show_history', category: 'Shell Core', module: 'shell.c', description: '입력 히스토리 출력' },
 
-  // Memory / Register Utility
   { command: 'wb', handler: 'w32_bit', category: 'Memory / Register Utility', module: 'utils.c', description: '주소의 특정 bit write', syntax: 'wb <addr> <bit> <0|1>' },
   { command: 'rb', handler: 'r32_bit', category: 'Memory / Register Utility', module: 'utils.c', description: '주소의 특정 bit read', syntax: 'rb <addr> <bit>' },
   { command: 'r32', handler: 'r32', category: 'Memory / Register Utility', module: 'utils.c', description: '32비트 읽기', syntax: 'r32 <addr>' },
   { command: 'w32', handler: 'w32', category: 'Memory / Register Utility', module: 'utils.c', description: '32비트 write', syntax: 'w32 <addr> <value>' },
   { command: 'read', handler: 'read_mem', category: 'Memory / Register Utility', module: 'utils.c', description: '메모리 연속 read', syntax: 'read <addr> <count>' },
 
-  // System / Diagnostic
   { command: 'led', handler: 'cmd_led', category: 'System / Diagnostic', module: 'test_commands.c', description: '보드 LED GPIO 제어', syntax: 'led <index> <on|off>' },
   { command: 'echo', handler: 'cmd_echo', category: 'System / Diagnostic', module: 'test_commands.c', description: '입력 문자열 echo 테스트', syntax: 'echo <text>' },
   { command: 'sched', handler: 'cmd_sched', category: 'System / Diagnostic', module: 'test_commands.c', description: '스케줄러 상태 조회' },
@@ -41,12 +38,12 @@ export const shellCommandCatalog: ShellCommandDefinition[] = [
   { command: 'voltmon', handler: 'cmd_voltmon', category: 'System / Diagnostic', module: 'test_commands.c', description: 'VoltMon 상태/에러 확인' },
   { command: 'vmlog', handler: 'cmd_vmlog', category: 'System / Diagnostic', module: 'test_commands.c', description: 'VoltMon 로그 on/off', syntax: 'vmlog <on|off>' },
   { command: 'faultout', handler: 'cmd_faultout', category: 'System / Diagnostic', module: 'test_commands.c', description: 'Fault output 상태 조회' },
+  { command: 'gpio_status', handler: 'cmd_gpio_status', category: 'System / Diagnostic', module: 'test_commands.c', description: 'GPIO 입력/출력 전체 상태 조회' },
   { command: 'commdiag', handler: 'cmd_commdiag', category: 'System / Diagnostic', module: 'test_commands.c', description: 'I2C dispatch 진단 출력/초기화' },
   { command: 'simlightw', handler: 'cmd_simlightw', category: 'System / Diagnostic', module: 'test_commands.c', description: 'light write 경로 시뮬레이션 테스트' },
   { command: 'simlightr', handler: 'cmd_simlightr', category: 'System / Diagnostic', module: 'test_commands.c', description: 'light read 경로 시뮬레이션 테스트' },
   { command: 'wdt_fault', handler: 'cmd_wdt_fault', category: 'System / Diagnostic', module: 'test_commands.c', description: 'WDT/ECM reset 경로 테스트', syntax: 'wdt_fault' },
 
-  // SPI / Flash / Fault Log
   { command: 'mcu_flash_id', handler: 'cmd_mcu_flash_id', category: 'SPI / Flash', module: 'test_commands.c', description: 'MCU Flash JEDEC ID 읽기' },
   { command: 'rohm_flash_id', handler: 'cmd_rohm_flash_id', category: 'SPI / Flash', module: 'test_commands.c', description: 'ROHM Flash JEDEC ID 읽기' },
   { command: 'rohm_flash_read', handler: 'cmd_rohm_flash_read', category: 'SPI / Flash', module: 'test_commands.c', description: 'ROHM Flash bypass read 테스트', syntax: 'rohm_flash_read <addr> <len>' },
@@ -66,12 +63,47 @@ export const shellCommandCatalog: ShellCommandDefinition[] = [
   { command: 'flash', handler: 'cmd_flash', category: 'SPI / Flash', module: 'test_commands.c', description: 'Flash ownership/meta dump/verify 등 서브 커맨드 dispatcher', syntax: 'flash <subcmd> ...' },
   { command: 'flogtest', handler: 'cmd_flogtest', category: 'SPI / Flash', module: 'test_commands.c', description: 'fault log TC01~TC05 자동 검증' },
 
-  // Error Flag / Fault Injection
   { command: 'faultinj', handler: 'cmd_faultinj', category: 'Error Flag / Fault Injection', module: 'test_commands.c', description: 'fault flag 제어 공용 핸들러', syntax: 'faultinj <status|set|clear|assign|setmask|clrmask|write>' },
   { command: 'error', handler: 'cmd_error', category: 'Error Flag / Fault Injection', module: 'test_commands.c', description: 'faultinj alias', syntax: 'error <same as faultinj>' },
   { command: 'err', handler: 'cmd_err', category: 'Error Flag / Fault Injection', module: 'test_commands.c', description: 'error alias', syntax: 'err <same as faultinj>' },
+  {
+    command: 'gmsl_sim',
+    handler: 'cmd_gmsl_sim',
+    category: 'Error Flag / Fault Injection',
+    module: 'test_commands.c',
+    description: 'GMSL line simulation dispatcher',
+    syntax: 'gmsl_sim <status|low|high|auto> [nowait]',
+    note: 'low/high는 기본 대기 후 상태 출력, nowait 옵션으로 즉시 리턴 가능',
+  },
+  {
+    command: 'gmsl_sim status',
+    handler: 'cmd_gmsl_sim',
+    category: 'Error Flag / Fault Injection',
+    module: 'test_commands.c',
+    description: '실제 GMSL 핀, override 상태, 디바운스 결과, XRST, ERROR_FLAG_GMSL_LINE 확인',
+  },
+  {
+    command: 'gmsl_sim low',
+    handler: 'cmd_gmsl_sim',
+    category: 'Error Flag / Fault Injection',
+    module: 'test_commands.c',
+    description: 'GMSL을 LOW로 강제해 fault 경로 재현, 기본적으로 약 20ms 후 상태 출력',
+  },
+  {
+    command: 'gmsl_sim high',
+    handler: 'cmd_gmsl_sim',
+    category: 'Error Flag / Fault Injection',
+    module: 'test_commands.c',
+    description: 'GMSL을 HIGH로 강제해 clear 경로 재현, 기본적으로 약 520ms 후 상태 출력',
+  },
+  {
+    command: 'gmsl_sim auto',
+    handler: 'cmd_gmsl_sim',
+    category: 'Error Flag / Fault Injection',
+    module: 'test_commands.c',
+    description: 'override를 해제하고 다시 실제 GPIO 입력으로 복귀',
+  },
 
-  // ROHM Commands
   { command: 'fail_det', handler: 'cmd_fail_det', category: 'ROHM OSD / SPI', module: 'test_rohm_commands.c', description: 'FAIL_DET 입력 레벨 확인' },
   { command: 'lights', handler: 'cmd_lights', category: 'ROHM OSD / SPI', module: 'test_rohm_commands.c', description: '다중 경고등 제어(32bit 마스크)', syntax: 'lights <4Bytes>' },
   { command: 'light', handler: 'cmd_light', category: 'ROHM OSD / SPI', module: 'test_rohm_commands.c', description: '단일 경고등 제어', syntax: 'light <on|off> <idx>' },
@@ -88,7 +120,6 @@ export const shellCommandCatalog: ShellCommandDefinition[] = [
   { command: 'rohm_cmd', handler: 'cmd_rohm_cmd', category: 'ROHM OSD / SPI', module: 'test_rohm_commands.c', description: '단일 ROHM opcode 송신', syntax: 'rohm_cmd <opcode>' },
   { command: 'rohm_xrst', handler: 'cmd_rohm_xrst', category: 'ROHM OSD / SPI', module: 'test_rohm_commands.c', description: 'XRST 핀 제어', syntax: 'rohm_xrst <read|high|low|pulse>' },
 
-  // Auto Command
   {
     command: 'version',
     handler: 'build_info',

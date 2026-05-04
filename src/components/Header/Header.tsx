@@ -8,8 +8,10 @@ const BAUD_RATES = [9600, 19200, 38400, 57600, 115200, 230400, 460800, 921600];
 const PAGE_TITLES: Record<string, string> = {
   '/terminal':        '시리얼 터미널',
   '/commands':        'CMD 명령어',
-  '/register':        '레지스터 R/W',
-  '/rohm-monitor':    'ROHM 모니터',
+  '/fault-injection': 'Fault Injection',
+  '/error-monitor':   '에러 모니터링',
+  '/gpio-monitor':    'GPIO 모니터링',
+  '/register':        '레지스터 모니터링',
   '/voltage-monitor': '전압 모니터링',
   '/warning-lights':  '경고등 제어',
   '/display-control': '디스플레이 제어',
@@ -29,7 +31,7 @@ const Header: React.FC = () => {
       {/* ── Left: Page Title ── */}
       <div className="header__left">
         <h1 className="header__page-title">
-          {PAGE_TITLES[location.pathname] || 'RH850 Pilot'}
+          {PAGE_TITLES[location.pathname] || 'Tovis SB'}
         </h1>
       </div>
 
