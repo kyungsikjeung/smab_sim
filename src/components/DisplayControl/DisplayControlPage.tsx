@@ -25,7 +25,7 @@ import { displayWindowService, HEARTBEAT_DISPLAY_URL } from 'services/displayWin
 import { DisplayOverlayPreset, DisplayOverlayRect, DisplayWindowResult, DisplayWindowStatus, WarningLight } from 'types';
 import './DisplayControl.css';
 
-const PREVIEW_BACKGROUND_IMAGE = './BackgroundImage/cluster_bg_1920x720.png';
+const PREVIEW_BACKGROUND_IMAGE = './heartbeat-assets/cluster_bg_1920x720.png';
 const VSB_SELECT_NONE = 'none';
 const WARNING_LIGHT_SELECT_DEFAULT = 'default';
 const VSB_SAMPLE_FILE_NAME = 'Sample.json';

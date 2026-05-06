@@ -4,7 +4,8 @@ const fs = require('fs');
 const path = require('path');
 const url = require('url');
 
-// SerialPort는 Electron 환경에서만 로드
+// serialport는 네이티브 모듈이라 Electron 빌드/패키징 환경에서만 안전하게 로드합니다.
+// 로드 실패 시 앱 UI는 유지하고, 브라우저 개발 환경은 renderer의 Mock 서비스가 담당합니다.
 let SerialPort;
 try {
   const sp = require('serialport');
@@ -22,9 +23,11 @@ let serialRxSeq = 0;
 let serialRxBuffer = '';
 let serialRxFlushTimer = null;
 
+// MCU UART는 한 줄이 여러 chunk로 쪼개져 들어올 수 있습니다.
+// 개행이 늦게 도착하는 로그도 화면에 멈춰 보이지 않도록 짧은 idle 후 강제 flush합니다.
 const SERIAL_RX_FLUSH_DELAY_MS = 40;
 const HEARTBEAT_DISPLAY_URL = '/heartbeat-display.html';
-const HEARTBEAT_BACKGROUND_IMAGE = './BackgroundImage/cluster_bg_1920x720.png';
+const HEARTBEAT_BACKGROUND_IMAGE = './heartbeat-assets/cluster_bg_1920x720.png';
 const HEARTBEAT_DISPLAY_WIDTH = 1920;
 const HEARTBEAT_DISPLAY_HEIGHT = 720;
 const DEFAULT_HEARTBEAT_OVERLAY_COLOR = '#ff3b30';
@@ -35,6 +38,8 @@ const heartbeatDisplayState = {
   overlayRects: [],
 };
 
+// Windows 현장 PC는 py launcher만 있거나 python3가 없을 수 있어 후보를 순차 시도합니다.
+// 첫 번째로 spawn에 성공한 실행 파일을 그대로 사용자 콘솔에 표시합니다.
 const PYTHON_CANDIDATES = process.platform === 'win32'
   ? [
       { command: 'py', args: ['-3'] },
@@ -96,6 +101,8 @@ const emitSerialData = (data) => {
 };
 
 const flushSerialRxBuffer = (force = false) => {
+  // renderer와 파서가 line-oriented로 동작하므로 main process에서 개행 단위로 정규화합니다.
+  // force=true는 포트 close나 idle timeout처럼 더 기다리면 마지막 조각을 잃을 수 있는 경우입니다.
   while (true) {
     const match = serialRxBuffer.match(/\r\n|\n|\r/);
     if (!match || typeof match.index !== 'number') break;
@@ -177,12 +184,14 @@ const flushOutputBuffer = (stream, state) => {
 const getAutomationTempDir = () => path.join(app.getPath('temp'), 'rh850-pilot-automation');
 
 const buildAutomationScriptPath = (fileName) => {
+  // 업로드 파일명을 그대로 쓰지 않고 안전한 basename과 timestamp를 붙여 동시 실행/경로 주입을 피합니다.
   const parsed = path.parse(fileName || 'uploaded_script.py');
   const safeBaseName = (parsed.name || 'uploaded_script').replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 48) || 'uploaded_script';
   return path.join(getAutomationTempDir(), `${safeBaseName}_${Date.now()}.py`);
 };
 
 const spawnPythonProcess = (scriptPath) => new Promise((resolve, reject) => {
+  // 후보 실행 파일 중 ENOENT만 다음 후보로 넘깁니다. 실행 자체의 오류는 사용자에게 즉시 돌려줍니다.
   const trySpawn = (index) => {
     if (index >= PYTHON_CANDIDATES.length) {
       reject(new Error('Python 실행 파일을 찾을 수 없습니다. Python 설치 또는 PATH 설정을 확인해주세요.'));
@@ -269,6 +278,8 @@ const normalizeInteger = (value, fallback = null) => {
 };
 
 const normalizeOverlayRect = (payload = {}) => {
+  // overlay 좌표는 1920x720 기준 원본 좌표계입니다. 실제 화면 배율 적용은 heartbeat-display.js에서 처리합니다.
+  // 크기가 없거나 0이면 전송은 허용하되 표시 대상에서는 제외합니다.
   const width = normalizeInteger(payload.width);
   const height = normalizeInteger(payload.height);
 
@@ -335,6 +346,7 @@ const getScaledDisplaySize = (display) => ({
 const matchesHeartbeatDisplaySize = (display) => {
   const scaledSize = getScaledDisplaySize(display);
 
+  // Windows 배율 설정에 따라 bounds/workArea/size가 서로 다르게 보고될 수 있어 네 기준을 모두 확인합니다.
   return (
     (display.bounds.width === HEARTBEAT_DISPLAY_WIDTH && display.bounds.height === HEARTBEAT_DISPLAY_HEIGHT)
     || (display.workArea.width === HEARTBEAT_DISPLAY_WIDTH && display.workArea.height === HEARTBEAT_DISPLAY_HEIGHT)
@@ -384,6 +396,7 @@ const forceHeartbeatWindowToFront = (targetDisplay = null, useFullscreen = false
     heartbeatWindow.restore();
   }
 
+  // 전용 1920x720 패널이면 kiosk/fullscreen으로 고정하고, 개발 PC에서는 일반 always-on-top 창처럼 둡니다.
   heartbeatWindow.setFullScreen(useFullscreen);
   heartbeatWindow.setKiosk(useFullscreen);
   heartbeatWindow.setAlwaysOnTop(true, useFullscreen ? 'screen-saver' : 'normal');
@@ -605,6 +618,7 @@ ipcMain.handle('serial:write', async (_event, data) => {
   const payload = Buffer.from(`${String(data)}\r\n`, 'utf8');
 
   return new Promise((resolve) => {
+    // write 콜백, drain 콜백, 포트 error/close 이벤트 중 어느 경로가 먼저 오든 한 번만 결과를 확정합니다.
     let settled = false;
 
     const finish = (result) => {
@@ -750,6 +764,7 @@ ipcMain.handle('automation:start-script', async (_event, payload) => {
   try {
     await fs.promises.mkdir(getAutomationTempDir(), { recursive: true });
     scriptPath = buildAutomationScriptPath(fileName);
+    // Renderer에는 브라우저 File 객체 경로가 노출되지 않으므로, main process가 temp .py를 만들어 실행합니다.
     await fs.promises.writeFile(scriptPath, content, 'utf8');
 
     const { child, pythonCommand } = await spawnPythonProcess(scriptPath);
@@ -786,6 +801,7 @@ ipcMain.handle('automation:start-script', async (_event, payload) => {
 
       activeAutomationProcess = null;
 
+      // 업로드된 Python 내용은 실행용 임시 파일로만 보관하고 프로세스 종료 후 즉시 삭제합니다.
       if (activeAutomationScriptPath) {
         try {
           await fs.promises.unlink(activeAutomationScriptPath);

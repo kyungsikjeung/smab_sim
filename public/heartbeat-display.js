@@ -2,7 +2,7 @@
 
 const CONFIG = {
   background: {
-    src: "./BackgroundImage/cluster_bg_1920x720.png",
+    src: "./heartbeat-assets/cluster_bg_1920x720.png",
     baseWidth: 1920,
     baseHeight: 720,
   },
@@ -55,6 +55,8 @@ const state = {
 };
 
 function getMessageTargetOrigin() {
+  // file://와 iframe preview에서는 origin이 "null"일 수 있어 postMessage 대상만 wildcard로 완화합니다.
+  // 실제 수신은 isTrustedDisplayOrigin에서 다시 제한합니다.
   return window.location.origin === "null" ? "*" : window.location.origin;
 }
 
@@ -90,6 +92,7 @@ function resizeCanvas() {
 }
 
 function getCoverRect(viewWidth, viewHeight, sourceWidth, sourceHeight) {
+  // 1920x720 기준 좌표를 어떤 창 크기에서도 같은 시각 위치에 보이게 하려고 CSS background-size: cover와 같은 계산을 씁니다.
   const scale = Math.max(viewWidth / sourceWidth, viewHeight / sourceHeight);
   const drawWidth = sourceWidth * scale;
   const drawHeight = sourceHeight * scale;
@@ -111,6 +114,8 @@ function getDisplayBaseRect() {
 }
 
 function mapOverlayToViewport(overlay) {
+  // overlay.x/y/width/height는 원본 클러스터 이미지 좌표입니다.
+  // 배경이 cover로 잘리거나 확대되어도 같은 아이콘 영역을 덮도록 viewport 좌표로 변환합니다.
   const displayRect = getDisplayBaseRect();
   const scaleX = displayRect.width / CONFIG.background.baseWidth;
   const scaleY = displayRect.height / CONFIG.background.baseHeight;
@@ -126,6 +131,7 @@ function mapOverlayToViewport(overlay) {
 }
 
 function triangleOffset(frame, travel, stepPerFrame) {
+  // heartbeat marker는 왕복 삼각파로 움직입니다. 한 방향으로만 증가시키면 화면 밖으로 나갑니다.
   if (travel <= 0 || stepPerFrame <= 0) {
     return 0;
   }
@@ -321,6 +327,7 @@ function drawSingleOverlayRect(overlay) {
 }
 
 function drawOverlayRects() {
+  // overlayRects가 있으면 다중 VSB 모드, 없으면 예전 단일 overlayRect 상태를 fallback으로 사용합니다.
   const overlays = state.overlayRects.length
     ? state.overlayRects
     : state.overlayRect && state.overlayRect.visible
@@ -411,11 +418,13 @@ function applyDisplayState(nextState) {
   }
 
   const overlayRects = normalizeOverlayRects(nextState.overlayRects);
+  // 단일/다중 overlay API를 동시에 지원하므로 primary overlayRect는 항상 첫 번째 visible rect와 맞춥니다.
   state.overlayRects = overlayRects;
   state.overlayRect = normalizeOverlayRect(nextState.overlayRect) || overlayRects[0] || null;
 }
 
 function announceReady() {
+  // preview iframe은 parent로, Electron sub window는 opener/preload IPC로 상태를 받을 수 있어 둘 다 알립니다.
   const message = { type: "heartbeat-display:ready" };
   const targetOrigin = getMessageTargetOrigin();
 

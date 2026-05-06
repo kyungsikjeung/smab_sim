@@ -32,6 +32,7 @@ class SerialService {
   private mockWarningLightMask: number;
 
   constructor() {
+    // window.electronAPI가 있으면 실제 하드웨어 통신, 없으면 브라우저 단독 UI 개발용 mock으로 동작합니다.
     this.isElectron = !!window.electronAPI;
     this.mockDataListeners = new Set();
     this.mockDisconnectedListeners = new Set();
@@ -82,6 +83,7 @@ class SerialService {
   }
 
   private emitMockDataLines(lines: string[], intervalMs = 24) {
+    // 실제 UART처럼 여러 줄이 약간의 시간차를 두고 들어오게 만들어 parser/update race를 개발 중에도 확인합니다.
     lines.forEach((line, index) => {
       window.setTimeout(() => {
         this.emitMockData(line);
@@ -92,6 +94,7 @@ class SerialService {
   private ensureMockInterval() {
     if (this.isElectron || this.mockIntervalId !== null) return;
 
+    // Mock interval은 연결 상태와 listener가 있을 때만 데이터를 흘려보내 CPU와 로그 노이즈를 줄입니다.
     this.mockIntervalId = window.setInterval(() => {
       if (!this.mockConnected || this.mockDataListeners.size === 0) return;
 
@@ -150,6 +153,7 @@ class SerialService {
   }
 
   private formatMockLightBytes(mask: number): string {
+    // firmware의 simlightr 응답은 상위 byte부터 내려오는 32bit mask입니다.
     const bytes = [
       (mask >>> 24) & 0xff,
       (mask >>> 16) & 0xff,
@@ -202,6 +206,7 @@ class SerialService {
     const lowRaw = Number.parseInt(match[2], 10);
     const highRaw = Number.parseInt(match[3], 10);
     const channel = this.mockVoltMonChannels.find((entry) => entry.commandIndex === commandIndex);
+    // firmware 명령은 0-based channel index를 사용하지만 UI는 CH1~CH6으로 표시합니다.
     if (!channel) return true;
 
     channel.lowRaw = lowRaw;
@@ -483,6 +488,7 @@ class SerialService {
     if (address === null || length === null || length <= 0) return true;
 
     window.setTimeout(() => {
+      // 알 수 없는 주소도 deterministic 값으로 채워 register editor가 전체 범위를 탐색할 수 있게 합니다.
       const values = Array.from({ length }, (_, index) => {
         const currentAddress = address + index;
         if (typeof this.mockRohmBytes[currentAddress] !== 'number') {
@@ -543,6 +549,7 @@ class SerialService {
     this.ensureMockInterval();
 
     window.setTimeout(() => {
+      // DisplayControl의 init 감지와 VoltageMonitor의 최초 샘플 수신 흐름을 브라우저에서도 재현합니다.
       this.emitMockData('[RH850] System Init OK');
       this.emitMockData('[RH850] UART Ready');
       this.emitMockData('[RH850] Display Init String Received');
@@ -573,6 +580,8 @@ class SerialService {
     }
 
     const normalizedCommand = data.trim();
+    // Mock handler들은 실제 펌웨어 명령 표면을 좁게 흉내냅니다.
+    // 알 수 없는 명령도 success로 둬 terminal UX를 막지 않고 TX 로그만 남기게 합니다.
     if (
       this.handleMockVoltMonRead(normalizedCommand)
       || this.handleMockVoltMonSet(normalizedCommand)

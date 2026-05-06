@@ -14,7 +14,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     write: (data) => ipcRenderer.invoke('serial:write', data),
     status: () => ipcRenderer.invoke('serial:status'),
 
-    // 이벤트 리스너
+    // 이벤트 리스너는 모두 unsubscribe 함수를 돌려줍니다.
+    // React effect cleanup에서 반드시 해제해야 같은 RX 로그가 중복 처리되지 않습니다.
     onData: (callback) => {
       let seq = 0;
       const handler = (_event, data) => {
@@ -58,6 +59,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     startHeartbeat: () => ipcRenderer.invoke('display-window:start-heartbeat'),
     stopHeartbeat: () => ipcRenderer.invoke('display-window:stop-heartbeat'),
     setHeartbeatEnabled: (enabled) => ipcRenderer.invoke('display-window:set-heartbeat-enabled', enabled),
+    // setOverlayRect는 구버전 단일 overlay UI 호환용이고, setOverlayRects가 현재 다중 VSB 경로입니다.
     setOverlayRect: (overlay) => ipcRenderer.invoke('display-window:set-overlay-rect', overlay),
     setOverlayRects: (overlays) => ipcRenderer.invoke('display-window:set-overlay-rects', overlays),
     clearOverlayRect: () => ipcRenderer.invoke('display-window:clear-overlay-rect'),

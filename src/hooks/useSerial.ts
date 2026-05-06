@@ -78,6 +78,8 @@ const latestFaultPinLevels: Record<'sysFault' | 'extFault', 0 | 1> = {
 };
 
 const buildVoltageFrame = (samples: VoltageSample[], timestamp: number) => {
+  // Voltage chart는 6채널 동시 프레임을 그립니다.
+  // 일부 채널만 들어온 로그는 최신값을 보강하고, 6채널 모두 한 번 이상 수신된 뒤부터 frame으로 저장합니다.
   if (samples.length === 0) return null;
 
   samples.forEach((sample) => {
@@ -114,6 +116,7 @@ const mapVoltMonEventToStatus = (eventType: VoltMonEvent['eventType']) => {
 };
 
 const parseFaultPinFallback = (line: string): FaultPinLevelEvent[] => {
+  // firmware stream 형식이 parser의 정규 표현식과 조금 달라도 핵심 SYS/EXT level은 놓치지 않기 위한 방어 경로입니다.
   const sysMatch = line.match(/\bSYS_FAULT\s*=\s*(HIGH|LOW)\b/i);
   const extMatch = line.match(/\bEXT_FAULT\s*=\s*(HIGH|LOW)\b/i);
   const events: FaultPinLevelEvent[] = [];
@@ -323,6 +326,7 @@ export function useSerial(options: UseSerialOptions = {}) {
     });
 
     if (sourceType === 'stream') {
+      // status 조회 응답은 현재값 갱신용이고, chart에는 주기 stream만 시계열로 넣습니다.
       pushFaultPinFrame({
         timestamp: now,
         values: {
@@ -468,6 +472,8 @@ export function useSerial(options: UseSerialOptions = {}) {
 
     const chunks = content.split('\n').map((chunk) => chunk.trim()).filter(Boolean);
     chunks.forEach((chunk) => {
+      // 모든 RX 라인은 이 지점에서 feature별 parser로 fan-out됩니다.
+      // Terminal 표시와 각 모니터 상태 갱신을 한 곳에서 처리해야 같은 로그를 중복 구독하지 않습니다.
       const voltMonRead = parseVoltMonReadLine(chunk);
       const voltMonStatus = parseVoltMonStatusLine(chunk);
       const voltageSamples = parseVoltageLine(chunk);
@@ -605,6 +611,7 @@ export function useSerial(options: UseSerialOptions = {}) {
     }
 
     resetRohmProtocolState();
+    // ROHM read 응답은 header/data 2줄 상태를 가지므로 새 연결 전에는 pending parser state를 비웁니다.
     const result = await serialService.connect({ portPath, baudRate });
     if (result.success) {
       setConnected(true);

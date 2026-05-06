@@ -86,6 +86,8 @@ const VOLTAGE_SCALE = 10000;
 const VOLT_MON_CHANNELS = 6;
 const shouldTraceVoltageParse = process.env.NODE_ENV !== 'production';
 
+// firmware 로그 라벨은 사람이 읽는 문자열이고 UI state key는 camelCase입니다.
+// 이 매핑으로 parser 외부가 로그 표기 변화에 덜 묶이게 합니다.
 const GPIO_OUTPUT_KEY_MAP: Record<string, GpioOutputKey> = {
   EXT_FAULT: 'extFault',
   SYS_FAULT: 'sysFault',
@@ -103,6 +105,7 @@ const FAULT_PIN_KEY_MAP: Record<string, FaultPinKey> = {
 };
 
 const stripPromptPrefix = (line: string): string => line
+  // 터미널 echo가 붙인 > 또는 # prompt는 parser 입장에서는 payload가 아니므로 제거합니다.
   .replace(/^\s*[>#]\s*/g, '')
   .trim();
 
@@ -139,6 +142,8 @@ const resolveVoltMonChannelRef = (
   rawChannel: number,
   indexMode: 'one-based' | 'zero-based'
 ): { channelId: number; commandIndex: number } | null => {
+  // voltmon set/read 명령은 0-based index, 화면과 일부 로그는 CH1~CH6 1-based를 씁니다.
+  // 이 함수가 두 좌표계를 한 쌍으로 정규화합니다.
   if (indexMode === 'zero-based') {
     if (!Number.isFinite(rawChannel) || rawChannel < 0 || rawChannel >= VOLT_MON_CHANNELS) {
       return null;
@@ -182,6 +187,7 @@ const parseRawVoltageToken = (raw: string, source: string): VoltageSample[] => {
   if (rawValue === null || Number.isNaN(rawValue)) return [];
 
   const isDecimal = raw.includes('.');
+  // 정수 ADC 값은 firmware convention에 따라 10000배 스케일이고, 소수는 이미 Volt 단위로 봅니다.
   const voltage = isDecimal
     ? rawValue
     : parseFloat((rawValue / VOLTAGE_SCALE).toFixed(4));
@@ -352,6 +358,7 @@ export const parseVoltMonReadLine = (line: string): VoltMonReadEvent | null => {
     /^ADC\s*=\s*(0x[0-9a-fA-F]+|\d+)\s*\[\s*(0x[0-9a-fA-F]+|\d+)\s*-\s*(0x[0-9a-fA-F]+|\d+)\s*\]\s*([A-Za-z_]+)?(?:\s*\(state\s*=\s*(-?\d+)\))?\s*$/i
   );
   if (bracketFormatMatch) {
+    // 예전 firmware 형식: CH0 ADC=raw [low-high] STATUS 처럼 0-based channel이 들어옵니다.
     const channelRef = resolveVoltMonChannelRef(channelPrefix.rawChannel, 'zero-based');
     if (!channelRef) return null;
 
@@ -390,6 +397,7 @@ export const parseVoltMonReadLine = (line: string): VoltMonReadEvent | null => {
   }
 
   const channelRef = resolveVoltMonChannelRef(channelPrefix.rawChannel, 'one-based');
+  // 현재 mock/신규 firmware 형식은 CH1 low=... high=... raw=...처럼 1-based channel을 사용합니다.
   if (!channelRef) return null;
 
   const lowRaw = lowMatch ? toNumber(lowMatch[1]) : null;
@@ -629,6 +637,7 @@ export const parseSimLightReadLine = (line: string): SimLightReadEvent | null =>
   if (tokens.length !== 4) return null;
 
   const bytes = tokens.map((value) => value & 0xff) as [number, number, number, number];
+  // simlightr RX byte 배열은 big-endian mask로 해석해야 Light 1이 bit0에 맞습니다.
   const mask = bytes.reduce((acc, value) => (((acc << 8) | value) >>> 0), 0);
 
   return {

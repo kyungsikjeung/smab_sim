@@ -10,7 +10,7 @@ const ASSET_BASE_URL = process.env.PUBLIC_URL || '.';
 
 export const HEARTBEAT_DISPLAY_URL = `${ASSET_BASE_URL}/heartbeat-display.html`;
 const HEARTBEAT_WINDOW_FEATURES = 'popup=yes,width=1920,height=720,left=0,top=0';
-const DEFAULT_BACKGROUND_IMAGE = './BackgroundImage/cluster_bg_1920x720.png';
+const DEFAULT_BACKGROUND_IMAGE = './heartbeat-assets/cluster_bg_1920x720.png';
 
 const getMessageTargetOrigin = () => (window.location.origin === 'null' ? '*' : window.location.origin);
 
